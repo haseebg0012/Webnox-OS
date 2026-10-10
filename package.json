@@ -1,0 +1,21 @@
+{
+  "name": "webnox-os",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Webnox OS — a workspace for every business.",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "dev": "node --env-file=.env server.js",
+    "start": "node server.js",
+    "test": "node tests/db.test.mjs",
+    "check": "node --check server.js && node --check tests/db.test.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2",
+    "express": "5.3.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

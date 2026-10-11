@@ -12,7 +12,7 @@
 
 - Follow `docs/06-Implementation-Plan.md`, M0 through M21, with checks at each milestone. **Latest owner instruction overrides the per-phase pause:** continue autonomously toward a complete operational system; do not stop for routine phase review. Pause only for essential account actions or decisions that cannot be safely inferred.
 - Plain HTML/CSS/JavaScript ES modules, Express 5 in `server.js`, Supabase, Vercel and PGlite. No React, bundler, CSS framework or animation library.
-- M0 provides server/deployment plumbing and temporary empty pages only. Authentication, the full UI and database tenancy are not implemented yet.
+- M0–M2 foundation and isolation are implemented. M3–M6 account/workspace flows are implemented and undergoing live verification. M7–M21 business modules remain in progress; never describe the whole system as complete yet.
 - Node 24 is the selected supported runtime. Dependencies are pinned in `package.json` and `package-lock.json`; use `npm ci` for repeatable installs.
 
 ## Security and data
@@ -29,10 +29,14 @@
 
 - Run `npm test` and `npm run check`.
 - Open every current page at 390, 768, 1024 and 1440; check errors and horizontal page overflow.
-- Tests in `tests/db.test.mjs` currently cover M0 config exposure and HTTP boundaries. The PGlite schema and Test 0 isolation harness start in M2; do not describe M0 tests as database isolation coverage.
+- `tests/db.test.mjs` includes HTTP boundaries plus `tests/database.mjs`: PGlite runs the schema twice, then Test 0 cross-workspace isolation, role restrictions, account invariants, suspension and atomic workspace provisioning.
 - Use the Vercel plugin for deployment checks when the correct project scope is authorized. Never change to an unrelated team to bypass a 403.
 - Give concise Hinglish handover, test results, pending external settings, and git commands. Only ask the owner to run `supabase/schema.sql` when that file actually changed.
 
 ## Current phase status
 
-M0 is in progress. Local source is prepared. Vercel project `webnoxos` was found, but the plugin returned 403 for team `haseebg0012-gmailcoms-projects`; no Vercel CLI credentials are configured. Live deployment, SITE_URL and Supabase Auth URL settings remain to be verified.
+M0 is live on webnoxos.vercel.app. Vercel plugin still returns 403 for the correct team; authorized dashboard access and GitHub deployment work. SITE_URL was added for Production and Preview. Supabase public signup is disabled, production Site URL and set-password redirect are configured, and the current schema is installed with RLS. OTP expiry remains to be verified.
+
+Current checks: 15 database/API checks, 16 public route checks, 24 authenticated responsive route checks at 390/768/1024/1440. Browser fixtures exist only in tests, never in production. Temporary test reports/screenshots are ignored in tmp/.
+
+Owner Master email: haseebg0012@gmail.com. First workspace Admin: Webnox Hub, webnoxhub@gmail.com. Manager: Haseeb, itshaseebgul@gmail.com. Provision these real accounts only; no production demo accounts. Passwords are chosen by recipients via private local setup links; do not expose tokens in logs.

@@ -7,6 +7,8 @@ Updated 11 October 2026 from the owner's instructions in this chat.
 - Platform name: **Webnox OS**, replacing Webnex OS / Webnex Hub OS in the source briefs.
 - Actual repository: **haseebg0012/Webnox-OS** on GitHub. This overrides proposed repo names in earlier specs.
 - Owner and Master: **Haseeb Gul**, unchanged.
+- Confirmed first-business Admin: **Webnox Hub — webnoxhub@gmail.com**.
+- Confirmed first-business Manager: **Haseeb — itshaseebgul@gmail.com**.
 - First business workspace: **Webnoxos**, an agency for ecommerce, business growth and web development. It replaces Ecometrix Hub as the first tenant and uses ordinary workspace creation.
 - Whether the first workspace is an internal Master project or a rented workspace will be selected at creation; ownership of the agency does not silently change tenant privileges.
 - The owner approved starting work after providing the GitHub repo. Subsequently he requested the full operational system by morning, without needing to make changes himself. This supersedes per-phase review pauses: continue through phases, retaining the checks, and request input only when essential external access is missing.
@@ -23,7 +25,7 @@ The copied documentation has product/business names and repo references normaliz
 5. **Atomic workspace creation:** Supabase Auth user creation via its Admin API is not part of a normal application SQL transaction. M4 needs an idempotent provisioning/compensation design so failures never activate a half-created workspace.
 6. **References not yet supplied:** exact original A4 invoice template and some prototype enum/module definitions are referenced but absent from the current inputs. Do not claim exact template parity without the source.
 
-These questions do not block the M0 server and deployment setup. No related product decision has been implemented yet.
+Implementation decisions: first payment is due at trial end (PRD); only Admin creates workspace members (PRD); manual suspension is stored separately; notification actor-skip is authoritative. Auth creation uses compensating cleanup only for identities proven unprovisioned, and workspace rows activate in one SQL transaction. Exact invoice-reference parity remains unverifiable until the reference is supplied.
 
 ## Practical interpretation
 

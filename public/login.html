@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sign in · Webnox OS</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="stylesheet" href="/css/auth.css" />
+  </head>
+  <body class="auth-page" data-auth="business">
+    <main class="auth-layout">
+      <aside class="auth-art"></aside>
+      <section class="auth-side">
+        <div class="auth-box">
+          <div class="auth-brand"><span class="mark">W</span></div>
+          <h1 id="auth-title">Sign in</h1>
+          <p class="auth-subtitle">Your people. Your work. Your space.</p>
+          <form class="auth-form" id="login-form">
+            <label class="field" id="email-field"
+              ><span>Email address</span
+              ><input
+                type="email"
+                name="email"
+                autocomplete="username"
+                required
+                placeholder="you@business.com"
+            /></label>
+            <div class="email-summary" hidden>
+              <span></span
+              ><button type="button" class="text-button" id="change-email">
+                Change
+              </button>
+            </div>
+            <label class="field" id="password-field" hidden
+              ><span>Password</span
+              ><input
+                type="password"
+                name="password"
+                autocomplete="current-password"
+                minlength="8"
+            /></label>
+            <p class="form-error" role="alert"></p>
+            <button type="submit" class="btn primary">Continue</button>
+          </form>
+          <div class="auth-links">
+            <button class="text-button" id="forgot">Forgot password?</button
+            ><button class="text-button" id="clear-brand" hidden>
+              Not your business?
+            </button>
+          </div>
+          <p class="tracking-notice">
+            This workspace records sign-in times, active and idle time, and task
+            timers. It does not record keystrokes, screenshots, your camera or
+            activity in other apps.
+          </p>
+          <p class="auth-footer">Powered by Webnox OS</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/js/auth.js"></script>
+  </body>
+</html>

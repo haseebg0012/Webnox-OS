@@ -1,0 +1,117 @@
+body[data-world="master"] {
+  --accent: #2563eb;
+  --accent-bg: #eff6ff;
+  --canvas: #f5f8ff;
+  --ink: #0b1f3a;
+  --line: #dbe6fa;
+  --muted: #5b7299;
+  --grad-hero: linear-gradient(135deg, #0b1f3a, #1e3a8a 45%, #0ea5e9);
+  --grad-card: linear-gradient(135deg, #1d4ed8, #0369a1);
+  --grad-soft: linear-gradient(135deg, #eff6ff, #e0f2fe);
+  --grad-line: linear-gradient(90deg, #2563eb, #0ea5e9);
+}
+[data-world="master"] .sidebar {
+  background: #0b1f3a;
+  border: 0;
+  color: #fff;
+}
+[data-world="master"] .sidebar-brand {
+  background: linear-gradient(135deg, #0b1f3a, #163366);
+}
+[data-world="master"] .nav-item {
+  color: #bdcce3;
+}
+[data-world="master"] .nav-label {
+  color: #8096b6;
+}
+[data-world="master"] .nav-item:hover {
+  background: #ffffff0d;
+}
+[data-world="master"] .nav-item.active {
+  background: #ffffff14;
+  color: white;
+  position: relative;
+}
+[data-world="master"] .nav-item.active:before {
+  content: "";
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--grad-line);
+}
+[data-world="master"] .sidebar-foot {
+  border-color: #ffffff15;
+}
+[data-world="master"] .sidebar-foot .muted {
+  color: #91a9c7;
+}
+[data-world="master"] .topbar {
+  border-top: 3px solid #2563eb;
+  border-image: var(--grad-line) 1;
+}
+[data-world="master"] .card {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px #2563eb08;
+}
+[data-world="master"] .btn.primary {
+  background: var(--grad-card);
+}
+[data-world="master"] .hero-stat {
+  background: var(--grad-card);
+  color: white;
+  border: 0;
+}
+[data-world="master"] .hero-stat .stat-label,
+[data-world="master"] .hero-stat .stat-sub {
+  color: #e0f2fe;
+}
+.master-pill {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: #7dd3fc;
+  background: #0ea5e926;
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+.hero {
+  padding: 26px 30px;
+  border-radius: 12px;
+  background: var(--grad-hero);
+  color: #fff;
+  margin-bottom: 24px;
+}
+.hero h1 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+.hero p {
+  color: #dbeafe;
+  margin: 0;
+}
+.view-banner {
+  padding: 12px 24px;
+  background: var(--grad-soft);
+  color: #1e40af;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.view-banner.full-access {
+  background: #fef3c7;
+  color: #92400e;
+}
+@media (max-width: 767px) {
+  .hero {
+    padding: 22px;
+  }
+  .hero h1 {
+    font-size: 21px;
+  }
+  .view-banner {
+    padding: 12px 16px;
+  }
+}

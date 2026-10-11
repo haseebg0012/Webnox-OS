@@ -81,6 +81,7 @@ export function toast(message, type = "") {
   item.className = `toast ${type}`;
   item.textContent = message;
   stack.append(item);
+  while (stack.children.length > 3) stack.firstElementChild.remove();
   setTimeout(() => item.remove(), 4000);
 }
 export function loading(message = "Loading your workspace…") {
@@ -199,7 +200,7 @@ export function field(
     placeholder = "",
   } = {},
 ) {
-  const attr = `name="${esc(name)}" ${required ? "required" : ""} ${min !== undefined ? `min="${esc(min)}"` : ""} ${max !== undefined ? `max="${esc(max)}"` : ""} ${step ? `step="${esc(step)}"` : ""}`;
+  const attr = `name="${esc(name)}" aria-label="${esc(title)}${required ? " *" : ""}" ${required ? "required" : ""} ${min !== undefined ? `min="${esc(min)}"` : ""} ${max !== undefined ? `max="${esc(max)}"` : ""} ${step ? `step="${esc(step)}"` : ""}`;
   let control = options
     ? `<select ${attr}>${options
         .map((o) => {

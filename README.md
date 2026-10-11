@@ -4,7 +4,24 @@ Har business ka apna workspace. Platform owner: **Haseeb Gul**. Pehla business *
 
 ## Abhi kya ready hai
 
-Express deployment, white business login, separate blue Master login, password setup, workspace isolation, workspace creation aur Team account management implement ho chuke hain. Tasks, tracking, leads, projects, finance, invoices aur complete billing lifecycle par implementation continue hai. Abhi isay complete operational release na samjhein.
+Workspace creation, branded sign-in, Team aur permissions ke saath tasks/review, timers, work reports, CRM leads, clients, projects, private files, notifications, finance, invoices aur Master rent/billing lifecycle implement hain. Updated Supabase schema install ho chuka hai; business-module Vercel release ki live verification chal rahi hai.
+
+Pehla workspace **Webnoxos** normal internal workspace hai, rent nahi lagta. Master: Haseeb Gul; Admin: Webnox Hub; Manager: Haseeb. Country Pakistan hai. Production mein demo accounts ya dummy business records nahi hain.
+
+Recipients apna password khud choose karenge. Private local files `Files/Owner-Setup.html` aur `Files/Webnoxos-Team-Setup.html` mein setup links hain; in files ko GitHub par upload ya publicly share mat karo. Link expire ho to Admin member ka link regenerate kar sakta hai; owner recovery ke liye private setup workflow use karo.
+
+Actual bank details, business address/logo aur original A4 reference abhi supplied nahi hain. Settings mein asli details add karo; koi fabricated bank information nahi dali gayi. Invoice print written specification ke mutabiq A4 hai; exact reference matching verify nahi ho sakti jab tak original template na mile.
+
+## Roz ka workflow
+
+1. Admin → Team se member banao, active roles assign karo aur private setup link relevant recipient ko do.
+2. Leads mein lead add/import karo ya Public form link copy karo. Won lead ko client mein convert karke project banao.
+3. Project mein designation ke mutabiq people add karo; approval history preserve hoti hai. Tasks assign karo, timer chalao, review submit aur approve karo.
+4. Finance mein currency pehle select karo, phir amount. Daily reference FX rate edit ho sakta hai; totals database calculate karta hai. Salary details sirf Admin/Manager dekhte hain.
+5. Invoice create karke Print / save PDF use karo. Actual payment receive hone par Mark paid karo. Expenses/bills par receipts attach ho sakti hain.
+6. Master rented workspace ka plan/payment manage karta hai. Suspension mein Admin ko sirf Billing milta hai; history delete nahi hoti. Internal workspaces rent lifecycle se excluded hain.
+
+Reminder/suspension sweeps page load ke baad chalte hain aur missed dates catch up karte hain; background scheduler ya email/WhatsApp sending is release ka hissa nahi. Live rate unavailable ho to manual rate enter karo. Invoices PDF browser print dialog se save hoti hain.
 
 ## Local setup
 
@@ -53,7 +70,7 @@ npm test
 npm run check
 ```
 
-Tests public-config whitelist, private paths, API guards aur brand lookup check karte hain. PGlite schema twice run karta hai aur cross-workspace isolation, role deactivation, last Admin/Manager protection aur atomic provisioning verify karta hai. Headless tests `tests/browser.cjs` aur `tests/authenticated-browser.cjs` mein hain; local Playwright module aur Chrome chahiye. Authenticated fixtures sirf tests ke andar hain. Pages 390, 768, 1024 aur 1440 par checked hain.
+28 database/API checks pass hain: public-config whitelist, private paths, API guards, public forms, salary isolation, invoice counters/totals, recurring bills, rent lifecycle aur cross-workspace access. PGlite schema twice run karta hai. Browser suites mein 20 public aur 200 authenticated page/tab checks 390, 768, 1024 aur 1440 par pass hain. `tests/integration-browser.mjs` actual local UI se PGlite tak poora lead → project → task/review aur invoice → payment workflow verify karta hai. Browser tests ko Playwright aur Chrome chahiye; module path `PLAYWRIGHT_MODULE` se set ho sakta hai. Fixtures sirf tests mein hain.
 
 ## Git handover
 
@@ -61,7 +78,7 @@ Project root mein:
 
 ```powershell
 git add .
-git commit -m "Set up Webnox OS foundation"
+git commit -m "Update Webnox OS"
 git push -u origin main
 ```
 

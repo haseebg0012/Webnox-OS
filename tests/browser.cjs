@@ -9,6 +9,9 @@ const fs = require("node:fs");
     for (const width of [390, 768, 1024, 1440]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       const errors = [];
+      await page.route("**/api/public/form?token=fixture", (route) =>
+        route.fulfill({ json: { name: "Fixture business", slug: "fixture" } }),
+      );
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("console", (m) => {
         if (m.type() === "error") errors.push(m.text());
@@ -17,6 +20,7 @@ const fs = require("node:fs");
         "/login.html",
         "/master-login",
         "/set-password.html",
+        "/lead.html?token=fixture",
         "/",
       ]) {
         errors.length = 0;
@@ -33,7 +37,7 @@ const fs = require("node:fs");
         checks++;
         if ([390, 1440].includes(width) && route !== "/")
           await page.screenshot({
-            path: `tmp/${route.slice(1).replace(".html", "")}-${width}.png`,
+            path: `tmp/${route.split("?")[0].slice(1).replace(".html", "")}-${width}.png`,
             fullPage: true,
           });
       }

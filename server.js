@@ -269,6 +269,13 @@ export function createApp(env = process.env, clientFactory = createClient) {
           .maybeSingle();
         if (result.data) brand = result.data;
       }
+      if (
+        brand.logo_url?.match(
+          /^w[0-9a-f-]{36}\/(logo|[0-9a-f-]{36})\.(png|jpe?g|webp|svg)$/,
+        )
+      ) {
+        brand.logo_url = `${config.supabaseUrl}/storage/v1/object/public/brand/${brand.logo_url}`;
+      }
       await delay(Math.max(0, 250 - (Date.now() - started)));
       res.json(brand);
     } catch (error) {
@@ -276,7 +283,150 @@ export function createApp(env = process.env, clientFactory = createClient) {
     }
   });
 
+  app.get("/api/public/form", async (req, res, next) => {
+    try {
+      const token = String(req.query.token || "");
+      if (!/^[a-f0-9]{64}$/.test(token))
+        throw fail("This form is unavailable.", 404);
+      const { data, error } = await service()
+        .from("workspaces")
+        .select("name,slug")
+        .eq("public_form_token", token)
+        .in("status", ["active", "trial"])
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw fail("This form is unavailable.", 404);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/public/lead", async (req, res, next) => {
+    try {
+      const p = req.body || {},
+        token = String(p.token || "");
+      if (!/^[a-f0-9]{64}$/.test(token))
+        throw fail("This form is unavailable.", 404);
+      const db = service(),
+        address = env.VERCEL
+          ? String(
+              req.headers["x-vercel-forwarded-for"] || req.socket.remoteAddress,
+            )
+          : String(req.socket.remoteAddress);
+      const key =
+        "lead:" +
+        createHmac("sha256", env.SUPABASE_SECRET_KEY)
+          .update(address)
+          .digest("hex");
+      const limited = await db.rpc("check_public_rate_limit", {
+        bucket_key: key,
+        max_hits: 5,
+      });
+      if (limited.error) throw limited.error;
+      if (!limited.data)
+        return res
+          .status(429)
+          .set("Retry-After", "60")
+          .json({ error: "Please wait a minute before trying again." });
+      if (p.fax) return res.status(201).json({ received: true });
+      const payload = {};
+      for (const name of [
+        "name",
+        "company",
+        "email",
+        "phone",
+        "website",
+        "country",
+        "niche",
+        "service",
+        "notes",
+      ]) {
+        if (
+          typeof p[name] !== "string" ||
+          p[name].length > (name === "notes" ? 5000 : 240)
+        )
+          throw fail("Please check your form details.");
+        payload[name] = p[name].trim();
+      }
+      if (!payload.company) throw fail("Company is required.");
+      if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email))
+        throw fail("Please enter a valid email.");
+      if (!/^[A-Z]{3}$/.test(p.currency)) throw fail("Choose a currency.");
+      payload.currency = p.currency;
+      payload.budget = Number(p.budget || 0);
+      if (
+        !Number.isFinite(payload.budget) ||
+        payload.budget < 0 ||
+        payload.budget > 999999999999
+      )
+        throw fail("Enter a valid budget.");
+      const result = await db.rpc("public_lead_submit", {
+        form_token: token,
+        payload,
+      });
+      if (result.error)
+        throw fail(
+          "This form is unavailable. Please contact the business.",
+          400,
+        );
+      res.status(201).json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.use("/api/master", requireAuth, masterOnly);
+  const rateCache = new Map();
+  app.get("/api/fx", requireAuth, async (req, res, next) => {
+    try {
+      const from = String(req.query.from || ""),
+        to = String(req.query.to || "");
+      if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to))
+        throw fail("Choose valid currencies.");
+      if (from === to)
+        return res.json({
+          rate: 1,
+          updated_at: new Date().toISOString(),
+          provider: null,
+        });
+      let entry = rateCache.get(from);
+      if (!entry || entry.expires < Date.now()) {
+        const response = await fetch(
+          `https://open.er-api.com/v6/latest/${from}`,
+          { signal: AbortSignal.timeout(6000) },
+        );
+        const data = await response.json();
+        if (!response.ok || data.result !== "success" || !data.rates)
+          throw fail(
+            "Rate unavailable. Enter your conversion rate manually.",
+            503,
+          );
+        entry = {
+          rates: data.rates,
+          updated_at: new Date(data.time_last_update_unix * 1000).toISOString(),
+          expires: Date.now() + 3600000,
+        };
+        rateCache.set(from, entry);
+      }
+      const rate = entry.rates[to];
+      if (!Number.isFinite(rate) || rate <= 0)
+        throw fail(
+          "Rate unavailable. Enter your conversion rate manually.",
+          503,
+        );
+      res.json({
+        rate,
+        updated_at: entry.updated_at,
+        provider: "ExchangeRate-API",
+      });
+    } catch (error) {
+      next(
+        error.status
+          ? error
+          : fail("Rate unavailable. Enter your conversion rate manually.", 503),
+      );
+    }
+  });
   app.get("/api/master/workspaces", async (req, res, next) => {
     try {
       res.json(await rpc(req.db, "master_workspace_list", {}));

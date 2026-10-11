@@ -1,5 +1,5 @@
 import { getSupabase } from "./supabase.js";
-import { state } from "./state.js";
+import { state, can } from "./state.js";
 import { icon, avatar, esc, loading, errorView, empty, dialog } from "./ui.js";
 const app = document.querySelector("#app");
 const routes = new Map();
@@ -21,6 +21,19 @@ export async function refreshContext() {
     roles: data.roles || [],
     perms: data.permissions || [],
   });
+  const navElement = document.querySelector(".sidebar nav");
+  if (navElement) {
+    const nav =
+      state.workspace?.status === "suspended"
+        ? [["billing", "Billing", "money"]]
+        : navigation();
+    navElement.innerHTML = nav
+      .map(
+        ([r, t, i]) =>
+          `<a class="nav-item ${location.hash === `#/${r}` ? "active" : ""}" title="${t}" href="#/${r}">${icon(i)}<span class="nav-text">${t}</span></a>`,
+      )
+      .join("");
+  }
   return data;
 }
 function navigation() {
@@ -28,14 +41,35 @@ function navigation() {
     ? [
         ["master-home", "Home", "home"],
         ["master-workspaces", "Workspaces", "grid"],
+        ["master-finance", "Finance", "money"],
+        ["master-settings", "Settings", "settings"],
       ]
     : [
         ["home", "Overview", "home"],
+        ["tasks", "Tasks", "tasks"],
+        ...(can("leads") ? [["leads", "Leads", "target"]] : []),
+        ...(can("clients") ? [["clients", "Clients", "briefcase"]] : []),
+        ...(can("projects") ? [["projects", "Projects", "folder"]] : []),
+        ...(can("finance") ? [["finance", "Finance", "money"]] : []),
+        ["activity", "My activity", "activity"],
+        ...(state.isAdmin || state.roles.includes("manager")
+          ? [["reports", "Work tracking", "clock"]]
+          : []),
         ["team", "Team", "users"],
+        ...(state.isAdmin
+          ? [
+              ["permissions", "Permissions", "shield"],
+              ["settings", "Settings", "settings"],
+              ["billing", "Billing", "money"],
+            ]
+          : []),
       ];
 }
 function shell() {
-  const nav = navigation();
+  const nav =
+    state.workspace?.status === "suspended"
+      ? [["billing", "Billing", "money"]]
+      : navigation();
   const name = state.isMaster ? "Webnox OS" : state.workspace.name;
   document.title = name;
   document.body.dataset.world = state.isMaster ? "master" : "business";
@@ -58,6 +92,7 @@ function shell() {
     );
     modal.querySelector("#sign-out").onclick = async () => {
       const sb = await getSupabase();
+      if (!state.isMaster) await (await import("./tracker.js")).stopTracking();
       await sb.auth.signOut();
       location.replace("/login.html");
     };
@@ -69,9 +104,16 @@ function shell() {
     );
 }
 async function route() {
+  document.body.classList.toggle(
+    "billing-only",
+    state.workspace?.status === "suspended",
+  );
   document.body.classList.remove("nav-open");
   const parts = location.hash.replace(/^#\/?/, "").split("/");
-  const key = parts[0] || (state.isMaster ? "master-home" : "home");
+  const key =
+    state.workspace?.status === "suspended" && parts[0] !== "invoice"
+      ? "billing"
+      : parts[0] || (state.isMaster ? "master-home" : "home");
   const entry = routes.get(key);
   const page = document.querySelector("#page");
   document.querySelector("#page-title").textContent =
@@ -118,6 +160,24 @@ async function boot() {
     shell();
     window.addEventListener("hashchange", route);
     await route();
+    (await import("./notifications.js")).startNotifications();
+    if (state.isMaster || state.isAdmin)
+      setTimeout(
+        () =>
+          getSupabase()
+            .then((sb) => sb.rpc("master_sweep"))
+            .then(async () => {
+              await refreshContext();
+              if (state.workspace?.status === "suspended")
+                location.hash = "#/billing";
+            })
+            .catch(() => {}),
+        0,
+      );
+    if (!state.isMaster) {
+      (await import("./tracker.js")).startTracking();
+      (await import("./timer.js")).startTimerUI();
+    }
     sb.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") location.replace("/login.html");
     });

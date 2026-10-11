@@ -10,7 +10,8 @@ Updated 11 October 2026 from the owner's instructions in this chat.
 - Confirmed first-business Admin: **Webnox Hub — webnoxhub@gmail.com**.
 - Confirmed first-business Manager: **Haseeb — itshaseebgul@gmail.com**.
 - First business workspace: **Webnoxos**, an agency for ecommerce, business growth and web development. It replaces Ecometrix Hub as the first tenant and uses ordinary workspace creation.
-- Whether the first workspace is an internal Master project or a rented workspace will be selected at creation; ownership of the agency does not silently change tenant privileges.
+- First workspace was created as an internal Master project, without rent, using ordinary business permissions. This implementation choice was disclosed during setup.
+- Country: **Pakistan**, explicitly confirmed by the owner. Keep it unchanged.
 - The owner approved starting work after providing the GitHub repo. Subsequently he requested the full operational system by morning, without needing to make changes himself. This supersedes per-phase review pauses: continue through phases, retaining the checks, and request input only when essential external access is missing.
 - Use the Vercel plugin for deployment testing. The user provided the local `.env` path; never disclose its contents.
 
@@ -30,4 +31,5 @@ Implementation decisions: first payment is due at trial end (PRD); only Admin cr
 ## Practical interpretation
 
 - The ban on links to the platform login means user-facing navigation links. Its required rewrite, robots exclusion, HTTP handler and security tests must reference that path.
-- M0 has only holding pages. The detailed themes and auth forms belong to later phases; do not imply those features are operational.
+- Auth, workspace and M7–M20 business modules are now implemented. Full schema migration succeeded on 11 October 2026; production frontend deployment is being verified. Current local verification: 28 database/API checks, 20 public responsive checks, 200 authenticated responsive page/tab checks and a real database-backed browser workflow.
+- Invoice A4 follows written requirements; exact visual reference remains absent. Business bank/address/logo details are left for the real values, never invented.

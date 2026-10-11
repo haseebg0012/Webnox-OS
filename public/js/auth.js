@@ -2,6 +2,14 @@ import { getSupabase } from "./supabase.js";
 import { mountArt } from "./auth-art.js";
 import { avatar, esc, dialog } from "./ui.js";
 const mode = document.body.dataset.auth;
+const signoutReason = sessionStorage.getItem("webnox-signout-reason");
+if (signoutReason && mode === "business") {
+  const notice = document.createElement("p");
+  notice.className = "form-error";
+  notice.textContent = signoutReason;
+  document.querySelector("#login-form")?.prepend(notice);
+  sessionStorage.removeItem("webnox-signout-reason");
+}
 mountArt(document.querySelector(".auth-art"));
 const params = new URLSearchParams(location.search);
 let slug = params.get("w") || localStorage.getItem("webnox-workspace") || "";

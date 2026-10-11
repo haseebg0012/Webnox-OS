@@ -12,7 +12,7 @@
 
 - Follow `docs/06-Implementation-Plan.md`, M0 through M21, with checks at each milestone. **Latest owner instruction overrides the per-phase pause:** continue autonomously toward a complete operational system; do not stop for routine phase review. Pause only for essential account actions or decisions that cannot be safely inferred.
 - Plain HTML/CSS/JavaScript ES modules, Express 5 in `server.js`, Supabase, Vercel and PGlite. No React, bundler, CSS framework or animation library.
-- M0–M2 foundation and isolation are implemented. M3–M6 account/workspace flows are implemented and undergoing live verification. M7–M21 business modules remain in progress; never describe the whole system as complete yet.
+- M0–M20 modules are implemented. M21 hardening includes database-backed browser workflows and responsive tests; production verification and the external items below still gate a complete handover.
 - Node 24 is the selected supported runtime. Dependencies are pinned in `package.json` and `package-lock.json`; use `npm ci` for repeatable installs.
 
 ## Security and data
@@ -35,8 +35,10 @@
 
 ## Current phase status
 
-M0 is live on webnoxos.vercel.app. Vercel plugin still returns 403 for the correct team; authorized dashboard access and GitHub deployment work. SITE_URL was added for Production and Preview. Supabase public signup is disabled, production Site URL and set-password redirect are configured, and the current schema is installed with RLS. OTP expiry remains to be verified.
+Foundation/account flows are live on webnoxos.vercel.app; the business-module release is being deployed. The complete schema through platform billing was installed successfully on 11 October 2026, with RLS. Vercel plugin returns 403 for the correct team; authorized dashboard access and GitHub deployment work. SITE_URL is configured for Production and Preview. Supabase public signup is disabled; production Site URL and set-password redirect are configured. OTP expiry remains to be verified.
 
-Current checks: 15 database/API checks, 16 public route checks, 24 authenticated responsive route checks at 390/768/1024/1440. Browser fixtures exist only in tests, never in production. Temporary test reports/screenshots are ignored in tmp/.
+Current checks: 28 database/API checks, 20 public route checks, 200 authenticated responsive page/tab checks at 390/768/1024/1440. `tests/integration-browser.mjs` runs real UI → local HTTP → PGlite RPC/RLS → UI flows for lead conversion, projects, task timers/review, invoices, expenses and bills. Browser fixtures exist only in tests, never in production. Temporary reports/screenshots/print PDFs are ignored in tmp/.
+
+Outstanding external details: recipients choose their own passwords; the original invoice A4 reference and actual bank/address/logo details were not supplied. The implemented printable A4 follows the written specification, with no claim of exact visual parity. Never invent bank details or enter a user's password. FX uses daily reference rates with manual override and visible attribution. Client/finance uploads track incomplete/failed uploads; only completed uploads show download links.
 
 Owner Master email: haseebg0012@gmail.com. First workspace Admin: Webnox Hub, webnoxhub@gmail.com. Manager: Haseeb, itshaseebgul@gmail.com. Provision these real accounts only; no production demo accounts. Passwords are chosen by recipients via private local setup links; do not expose tokens in logs.

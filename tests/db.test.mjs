@@ -179,6 +179,95 @@ test("public branding is limited to name, logo and slug; negative lookups are in
   );
 });
 
+test("public lead API whitelists data, rejects invalid forms and enforces the rate limit", async () => {
+  const token = "a".repeat(64),
+    calls = [];
+  let allowed = true;
+  const factory = () => ({
+    rpc: async (name, args) => {
+      if (name === "check_public_rate_limit") return { data: allowed };
+      calls.push(args);
+      return args.form_token === token
+        ? { data: null }
+        : { error: { message: "unavailable" } };
+    },
+    from() {
+      let supplied;
+      const chain = {
+        select() {
+          return chain;
+        },
+        eq(_k, v) {
+          supplied = v;
+          return chain;
+        },
+        in() {
+          return chain;
+        },
+        async maybeSingle() {
+          return {
+            data:
+              supplied === token ? { name: "Fixture", slug: "fixture" } : null,
+          };
+        },
+      };
+      return chain;
+    },
+  });
+  await withServer(
+    configured,
+    async (base) => {
+      const payload = {
+        token,
+        name: "Contact",
+        company: "Company",
+        email: "contact@fixture.invalid",
+        phone: "",
+        website: "",
+        country: "",
+        niche: "",
+        service: "",
+        notes: "",
+        currency: "PKR",
+        budget: 100,
+        workspace_id: "forged",
+        agent_id: "forged",
+        stage: "won",
+      };
+      const post = (body) =>
+        fetch(base + "/api/public/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      assert.deepEqual(
+        await (await fetch(base + "/api/public/form?token=" + token)).json(),
+        { name: "Fixture", slug: "fixture" },
+      );
+      assert.equal(
+        (await fetch(base + "/api/public/form?token=bad")).status,
+        404,
+      );
+      assert.equal((await post(payload)).status, 201);
+      assert.equal(calls.length, 1);
+      for (const key of ["workspace_id", "agent_id", "stage", "token"])
+        assert.equal(key in calls[0].payload, false);
+      assert.equal((await post({ ...payload, fax: "bot" })).status, 201);
+      assert.equal(calls.length, 1);
+      assert.equal((await post({ ...payload, company: "" })).status, 400);
+      assert.equal(
+        (await post({ ...payload, token: "b".repeat(64) })).status,
+        400,
+      );
+      allowed = false;
+      const limited = await post(payload);
+      assert.equal(limited.status, 429);
+      assert.equal(limited.headers.get("retry-after"), "60");
+    },
+    factory,
+  );
+});
+
 test("missing or malformed config fails closed without leaking values", async () => {
   const legacyServiceKey = `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role: "service_role" })).toString("base64url")}.signature`;
   const invalid = [

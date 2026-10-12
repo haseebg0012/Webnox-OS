@@ -1,4 +1,7 @@
-import { businessFields, platformCan } from "./master-control.js";
+import { COUNTRIES, CURRENCIES, existingOptions } from "../lead-options.js";
+import { DESIGNATIONS } from "../team-config.js";
+import { pictureField, readPicture, previewPicture } from "../profile-tools.js";
+import { businessFields, platformCan, validateBusinessForm } from "./master-control.js";
 import { registerRoute } from "../app.js";
 import { api, rpc, q } from "../data.js";
 import { state, money } from "../state.js";
@@ -41,7 +44,7 @@ registerRoute("master-home", "Dashboard", async (el) => {
       '<div class="hero"><h1>Webnox OS Control Center</h1><p>Your platform permissions determine which tools are available.</p></div><a class="btn primary" href="#/master-profile">Open my profile</a>';
     return;
   }
-  const rows = await api("/api/master/workspaces");
+  const rows = (await api("/api/master/workspaces")).filter(w => !w.deleted_at);
   const live = rows.filter((w) => ["active", "trial"].includes(w.status));
   el.innerHTML = `<div class="hero"><span class="eyebrow">Platform Master Control Panel</span><div class="row between wrap"><div><h1>Webnox OS Architecture & Governance</h1><p>Manage your businesses, platform team and operational templates.</p></div><a class="btn" href="#/create-workspace">${icon("plus")}Create workspace</a></div></div><div class="grid four" style="margin-bottom:24px">${[
     ["Workspaces live", live.length],
@@ -62,16 +65,28 @@ registerRoute("master-home", "Dashboard", async (el) => {
 function workspaceTable(rows) {
   return rows.length
     ? table(
-        ["Workspace", "Type", "Members", "Plan", "Next due", "Status", ""],
+        [
+          "Workspace",
+          "Owner / assigned Admin",
+          "Category",
+          "Type",
+          "Members",
+          "Plan",
+          "Next due",
+          "Status",
+          "",
+        ],
         rows.map((w) => [
           `<div class="row">${avatar(w.name)}<div><strong>${esc(w.name)}</strong><div class="small muted">${esc(w.slug)}</div></div></div>`,
+          `${esc(w.business_details?.owner_name || "Not supplied")}<div class="small muted">${esc(w.assignments?.find((a) => a.account_type === "admin")?.name || "")}</div>`,
+          esc(w.business_details?.industry || "Not supplied"),
           w.type === "master_project" ? "Internal" : "Rented",
           w.member_count,
           w.subscription
             ? `${esc(w.subscription.plan_name || label(w.subscription.cycle))}<br><span class="muted small">${money(w.subscription.amount_original, w.subscription.currency)}</span>`
             : "No rent",
           date(w.subscription?.next_due || w.subscription?.trial_ends_on),
-          chip(w.status),
+          chip(w.deleted_at ? "deleted" : w.status),
           `<a class="btn small" href="#/workspace/${w.id}">Open ${icon("chevron", 14)}</a>`,
         ]),
       )
@@ -85,7 +100,7 @@ function workspaceTable(rows) {
 registerRoute("master-workspaces", "Workspaces", async (el) => {
   if (!state.isMaster) throw new Error("Access is not permitted.");
   const rows = await api("/api/master/workspaces");
-  el.innerHTML = `<div class="page-heading"><div><h1>Workspaces</h1><p>Every business has its own space.</p></div><a class="btn primary" href="#/create-workspace">${icon("plus")}Create workspace</a></div><div class="toolbar"><label class="search">${icon("search")}<input class="input" id="workspace-search" aria-label="Search workspaces" placeholder="Search workspaces"></label><div class="filters">${["all", "active", "trial", "suspended", "archived"].map((s, n) => `<button data-status="${s}" class="${n ? "" : "active"}">${label(s)} ${s === "all" ? rows.length : rows.filter((w) => w.status === s).length}</button>`).join("")}</div></div><div id="workspace-list"></div>`;
+  el.innerHTML = `<div class="page-heading"><div><h1>Workspaces</h1><p>Every business has its own space.</p></div><a class="btn primary" href="#/create-workspace">${icon("plus")}Create workspace</a></div><div class="toolbar"><label class="search">${icon("search")}<input class="input" id="workspace-search" aria-label="Search workspaces" placeholder="Search workspaces"></label><div class="filters">${["all", "active", "trial", "suspended", "archived", "deleted"].map((s, n) => `<button data-status="${s}" class="${n ? "" : "active"}">${label(s)} ${s === "all" ? rows.filter(w => !w.deleted_at).length : rows.filter(w => s === "deleted" ? !!w.deleted_at : !w.deleted_at && w.status === s).length}</button>`).join("")}</div></div><div id="workspace-list"></div>`;
   if (!platformCan("create_workspaces"))
     el.querySelector('a[href="#/create-workspace"]')?.remove();
   let status = "all";
@@ -94,7 +109,9 @@ registerRoute("master-workspaces", "Workspaces", async (el) => {
     el.querySelector("#workspace-list").innerHTML = workspaceTable(
       rows.filter(
         (w) =>
-          (status === "all" || w.status === status) &&
+          (status === "deleted"
+            ? !!w.deleted_at
+            : !w.deleted_at && (status === "all" || w.status === status)) &&
           (w.name + " " + w.slug).toLowerCase().includes(term),
       ),
     );
@@ -115,7 +132,7 @@ registerRoute("master-workspaces", "Workspaces", async (el) => {
 registerRoute("create-workspace", "Create workspace", async (el) => {
   if (!platformCan("create_workspaces"))
     throw new Error("Access is not permitted.");
-  el.innerHTML = `<div class="page-heading"><div><h1>Create workspace</h1><p>A separate, secure home for a business and its team.</p></div><a class="btn" href="#/master-workspaces">Cancel</a></div><form id="workspace-form" class="workspace-create"><div class="card"><section class="form-section"><h2>1. Business details</h2><div class="form-grid">${field("name", "Business name", "", { required: true })}${field("slug", "Workspace slug", "", { required: true, help: "Used on branded sign-in links. Example: webnoxos" })}${field("short_code", "Short code", "", { required: true, help: "2–4 letters for business invoice numbers." })}${field("country", "Country")}${businessFields()}${field("timezone", "Timezone", "Asia/Karachi", { required: true })}${field("app_currency", "Workspace currency", "PKR", { options: ["PKR", "USD", "GBP", "EUR", "AED", "SAR", "CAD", "AUD", "INR"] })}</div></section><section class="form-section"><h2>2. Space and rent</h2><div class="form-grid">${field(
+  el.innerHTML = `<div class="page-heading"><div><h1>Create workspace</h1><p>A separate, secure home for a business and its team.</p></div><a class="btn" href="#/master-workspaces">Cancel</a></div><form id="workspace-form" class="workspace-create"><div class="card"><section class="form-section"><h2>1. Business details</h2><div class="form-grid">${field("name", "Business name", "", { required: true })}${field("slug", "Workspace slug", "", { required: true, help: "Used on branded sign-in links. Example: webnoxos" })}${field("short_code", "Short code", "", { required: true, help: "2–4 letters for business invoice numbers." })}${field("country", "Country", "Pakistan", { options: COUNTRIES, required: true })}${businessFields()}${pictureField("Business logo")}${field("timezone", "Timezone", "Asia/Karachi", { required: true, options: Intl.supportedValuesOf("timeZone") })}${field("app_currency", "Workspace currency", "PKR", { options: ["PKR", "USD", "GBP", "EUR", "AED", "SAR", "CAD", "AUD", "INR"] })}</div></section><section class="form-section"><h2>2. Space and rent</h2><div class="form-grid">${field(
     "type",
     "Space type",
     "rented",
@@ -138,8 +155,10 @@ registerRoute("create-workspace", "Create workspace", async (el) => {
         ["yearly", "Yearly"],
       ],
     },
-  )}${field("next_cycle", "After trial", "monthly", { options: ["monthly", "quarterly", "yearly"] })}${field("start_date", "Start date", today(), { type: "date" })}${field("currency", "Rent currency", "PKR", { options: ["PKR", "USD", "GBP", "EUR", "AED", "SAR", "CAD", "AUD", "INR"] })}${field("amount", "Rent amount", "0", { type: "number", min: 0, step: ".01" })}${field("fx_rate", "Exchange rate to PKR", "1", { type: "number", min: ".000001", step: ".000001" })}${field("grace_days", "Grace period (days)", "7", { type: "number", min: 0, max: 90 })}${field("member_limit", "Member limit", "", { type: "number", min: 1, help: "Optional. A warning only; members are never blocked." })}</div><p class="help" id="plan-preview" style="margin-top:16px"></p></section><section class="form-section"><h2>3. Available roles</h2><p class="muted small">Admin and Manager are always included.</p><div class="form-grid">${optionalRoles.map(([k, v]) => `<label class="check"><input type="checkbox" name="role" value="${k}" checked>${v}</label>`).join("")}</div></section><section class="form-section"><h2>4. Admin and Manager</h2><p class="muted small">Use two separate email addresses. Private setup links are generated after creation.</p><div class="form-grid">${field("admin_name", "Admin name", "", { required: true })}${field("admin_email", "Admin email", "", { type: "email", required: true })}${field("admin_title", "Admin designation", "Business owner")}${field("manager_title", "Manager designation", "Manager")}${field("manager_name", "Manager name", "", { required: true })}${field("manager_email", "Manager email", "", { type: "email", required: true })}${field("admin_phone", "Admin phone", "", { type: "tel" })}${field("manager_phone", "Manager phone", "", { type: "tel" })}</div></section><section class="form-section"><h2>5. Review and create</h2><p class="muted">The business gets its own data, permissions and branding. Its Admin and Manager receive separate password links for you to share.</p><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${icon("plus")}Create workspace</button></div></section></div><aside class="card create-summary"><h2>Your workspace</h2><div id="live-summary"></div></aside></form>`;
+  )}${field("next_cycle", "After trial", "monthly", { options: ["monthly", "quarterly", "yearly"] })}${field("start_date", "Start date", today(), { type: "date" })}${field("currency", "Rent currency", "PKR", { options: ["PKR", "USD", "GBP", "EUR", "AED", "SAR", "CAD", "AUD", "INR"] })}${field("amount", "Rent amount", "0", { type: "number", min: 0, step: ".01" })}${field("fx_rate", "Exchange rate to PKR", "1", { type: "number", min: ".000001", step: ".000001" })}${field("grace_days", "Grace period (days)", "7", { type: "number", min: 0, max: 90 })}${field("member_limit", "Member limit", "", { type: "number", min: 1, help: "Optional. A warning only; members are never blocked." })}</div><p class="help" id="plan-preview" style="margin-top:16px"></p></section><section class="form-section"><h2>3. Available roles</h2><p class="muted small">Admin and Manager are always included.</p><div class="form-grid">${optionalRoles.map(([k, v]) => `<label class="check"><input type="checkbox" name="role" value="${k}" checked>${v}</label>`).join("")}</div></section><section class="form-section"><h2>4. Admin and Manager</h2><p class="muted small">Use two separate email addresses. Private setup links are generated after creation.</p><div class="form-grid">${field("admin_name", "Admin name", "", { required: true })}${field("admin_email", "Admin email", "", { type: "email", required: true })}${field("admin_title", "Admin designation", "Business owner", { options: ["Business owner", ...DESIGNATIONS] })}${field("manager_title", "Manager designation", "Manager", { options: DESIGNATIONS })}${field("manager_name", "Manager name", "", { required: true })}${field("manager_email", "Manager email", "", { type: "email", required: true })}${field("admin_phone", "Admin phone", "", { type: "tel" })}${field("manager_phone", "Manager phone", "", { type: "tel" })}</div></section><section class="form-section"><h2>5. Review and create</h2><p class="muted">The business gets its own data, permissions and branding. Its Admin and Manager receive separate password links for you to share.</p><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${icon("plus")}Create workspace</button></div></section></div><aside class="card create-summary"><h2>Your workspace</h2><div id="live-summary"></div></aside></form>`;
   const form = el.querySelector("form");
+  previewPicture(form);
+  validateBusinessForm(form);
   let slugTouched = false,
     codeTouched = false;
   form.slug.oninput = () => (slugTouched = true);
@@ -181,6 +200,7 @@ registerRoute("create-workspace", "Create workspace", async (el) => {
       form.querySelector(".form-error").textContent = "";
       try {
         const p = formValues(form);
+        p.logo_image = await readPicture(form);
         p.roles = [...form.querySelectorAll("[name=role]:checked")].map(
           (i) => i.value,
         );
@@ -190,7 +210,10 @@ registerRoute("create-workspace", "Create workspace", async (el) => {
         });
         location.hash = "#/master-workspaces";
         showInvites(result.invites);
-        toast("Workspace created");
+        toast(
+          result.imageWarning || "Workspace created",
+          result.imageWarning ? "error" : undefined,
+        );
       } catch (err) {
         form.querySelector(".form-error").textContent = err.message;
       }

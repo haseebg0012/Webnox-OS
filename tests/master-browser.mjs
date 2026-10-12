@@ -115,6 +115,43 @@ app.get("/fixture/avatar", (_req, res) =>
 app.get("/api/master/workspaces", async (_req, res) =>
   res.json((await run("select master_workspace_list() result"))[0].result),
 );
+app.post("/api/master/action", async (req, res) => {
+  if (req.body.password !== "fixture-current")
+    return res
+      .status(403)
+      .json({ error: "Master password could not be verified." });
+  const job = queue.then(async () => {
+    await db.exec("reset role;set role service_role");
+    try {
+      return (
+        await db.query("select master_secure_action($1,$2,$3,$4) result", [
+          master,
+          req.body.action,
+          req.body.target,
+          req.body.payload,
+        ])
+      ).rows[0].result;
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+  queue = job.catch(() => {});
+  try {
+    res.json(await job);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+app.get("/api/master/members/:id", async (req, res) => {
+  try {
+    res.json(
+      (await run("select master_profile_details($1) data", [req.params.id]))[0]
+        .data,
+    );
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
 app.get("/js/supabase.js", (_req, res) =>
   res.type("text/javascript").send(`
  const send=(path,body)=>fetch('/fixture/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
@@ -131,7 +168,19 @@ page.on("pageerror", (e) => errors.push(e.message));
 const base = `http://127.0.0.1:${server.address().port}`;
 const go = async (route) => {
   await page.goto(base + "/#/" + route);
-  await page.locator("#page h1").first().waitFor();
+  await page
+    .locator("#page h1")
+    .first()
+    .waitFor()
+    .catch(async (e) => {
+      console.error(
+        JSON.stringify({
+          errors,
+          body: await page.locator("body").innerText(),
+        }),
+      );
+      throw e;
+    });
   assert.equal(
     await page.getByText("Unable to load this page", { exact: true }).count(),
     0,
@@ -171,13 +220,11 @@ try {
     x.fillRect(450, 0, 450, 500);
     return c.toDataURL("image/png").split(",")[1];
   });
-  await page
-    .locator("[data-picture]")
-    .setInputFiles({
-      name: "fixture.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(source, "base64"),
-    });
+  await page.locator("[data-picture]").setInputFiles({
+    name: "fixture.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(source, "base64"),
+  });
   await page.locator("canvas.avatar-crop").waitFor();
   for (const [name, value] of [
     ["Zoom", "2"],
@@ -192,12 +239,10 @@ try {
   assert.equal(uploaded.subarray(8, 12).toString(), "WEBP");
   await page.reload();
   await page.locator(".profile-portrait img").waitFor();
-  const size = await page
-    .locator(".profile-portrait img")
-    .evaluate((img) => ({
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-    }));
+  const size = await page.locator(".profile-portrait img").evaluate((img) => ({
+    width: img.naturalWidth,
+    height: img.naturalHeight,
+  }));
   assert.deepEqual(size, { width: 512, height: 512 });
   await fill("Current password *", "wrong");
   await fill("New password *", "fixture-new-123");
@@ -238,15 +283,44 @@ try {
   await go("workspace/" + A);
   await click("Settings");
   await click("Edit business details");
+  await fill("Owner name *", "Fixture Owner");
+  await page
+    .getByLabel("Business category *", { exact: true })
+    .selectOption("Ecommerce");
+  await fill("Business email *", "owner@fixture.invalid");
+  await fill("Business phone *", "+923001234567");
   await fill("Registered / legal name", "Fixture Legal Ltd");
   await fill("City", "Fixture City");
   await fill("Website", "https://fixture.invalid");
   await click("Save business details");
-  await closeDialog();
+  await fill("Master password *", "wrong-fixture");
+  await click("Confirm action");
+  await page
+    .getByText("Master password could not be verified.", { exact: true })
+    .waitFor();
+  await fill("Master password *", "fixture-current");
+  await click("Confirm action");
+  await page.locator("dialog").first().waitFor({ state: "detached" });
   const saved = (await run("select master_workspace_list() data"))[0].data.find(
     (w) => w.id === A,
   );
   assert.equal(saved.business_details.city, "Fixture City");
+  await go("member-profile/" + admin);
+  await page.getByText("admin@fixture.invalid", { exact: true }).waitFor();
+  assert.equal(await page.locator("#page input").count(), 0);
+  await click("Edit");
+  await fill("Display name *", "Edited Admin");
+  await click("Save changes");
+  await fill("Master password *", "fixture-current");
+  await click("Confirm action");
+  await page.locator("dialog").first().waitFor({ state: "detached" });
+  await page
+    .getByRole("heading", { name: "Edited Admin", exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: "tmp/master-member-profile.png",
+    fullPage: true,
+  });
   await go("master-profile");
   await page.screenshot({
     path: "tmp/master-profile-workflow.png",

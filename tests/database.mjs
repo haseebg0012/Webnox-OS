@@ -21,6 +21,45 @@ async function as(id, sql, params = []) {
     await db.exec("reset role;");
   }
 }
+// Simulates the trusted server boundary after Auth password verification.
+async function secureLegacy(id, sql, params = []) {
+  let action,
+    payload = {};
+  const target = params[0];
+  if (sql.includes("master_set_roles")) {
+    action = "workspace_roles";
+    payload = { roles: params[1] };
+  }
+  if (sql.includes("master_set_status")) {
+    action =
+      "workspace_" +
+      { suspended: "inactive", archived: "archive", active: "restore" }[
+        params[1]
+      ];
+    payload = { reason: params[2] };
+  }
+  if (sql.includes("master_set_full_access")) {
+    action = "workspace_access";
+    payload = { enabled: sql.includes("true") };
+  }
+  if (sql.includes("master_save_workspace")) {
+    action = "workspace_edit";
+    payload = params[1];
+  }
+  await db.exec("reset role;set role service_role;");
+  try {
+    return (
+      await db.query("select master_secure_action($1,$2,$3,$4) result", [
+        id,
+        action,
+        target,
+        payload,
+      ])
+    ).rows;
+  } finally {
+    await db.exec("reset role");
+  }
+}
 async function owner(sql) {
   await db.exec(
     "reset role;select set_config('request.jwt.claim.sub','',false)",
@@ -244,6 +283,10 @@ test("database contract", async (t) => {
         );
         const payload = {
           name: "New business",
+          owner_name: "Fixture Owner",
+          industry: "Ecommerce",
+          business_email: "business@fixture.invalid",
+          business_phone: "+923001234567",
           slug: "NEW Business",
           short_code: "NB",
           type: "rented",
@@ -634,7 +677,7 @@ test("database contract", async (t) => {
     await t.test(
       "permissions and brand: only Admin can change own workspace",
       async () => {
-        await as(master, "select master_set_roles($1,$2)", [
+        await secureLegacy(master, "select master_set_roles($1,$2)", [
           A,
           ["sales_rep", "finance"],
         ]);
@@ -762,7 +805,7 @@ test("database contract", async (t) => {
             .length,
           0,
         );
-        await as(master, "select master_set_roles($1,$2)", [
+        await secureLegacy(master, "select master_set_roles($1,$2)", [
           A,
           ["sales_rep", "lead_gen", "finance"],
         ]);
@@ -798,7 +841,7 @@ test("database contract", async (t) => {
     await t.test(
       "projects: approval directions, ownership, linkage and private files",
       async () => {
-        await as(master, "select master_set_roles($1,$2)", [
+        await secureLegacy(master, "select master_set_roles($1,$2)", [
           A,
           ["sales_rep", "project_manager", "finance"],
         ]);
@@ -1557,7 +1600,7 @@ test("database contract", async (t) => {
           ]),
           /cannot/,
         );
-        await as(master, "select master_set_status($1,$2,$3)", [
+        await secureLegacy(master, "select master_set_status($1,$2,$3)", [
           w.id,
           "suspended",
           "Fixture suspension",
@@ -1571,7 +1614,7 @@ test("database contract", async (t) => {
           )[0].status,
           "suspended",
         );
-        await as(master, "select master_set_status($1,$2,$3)", [
+        await secureLegacy(master, "select master_set_status($1,$2,$3)", [
           w.id,
           "archived",
           "Fixture archive",
@@ -1589,7 +1632,7 @@ test("database contract", async (t) => {
           (await as(admin, "select billing_workspace() id"))[0].id,
           null,
         );
-        await as(master, "select master_set_status($1,$2,$3)", [
+        await secureLegacy(master, "select master_set_status($1,$2,$3)", [
           w.id,
           "active",
           "Fixture restore",
@@ -1678,13 +1721,17 @@ test("database contract", async (t) => {
             )
           ).length > 0,
         );
-        await as(master, "select master_set_full_access($1,false)", [A]);
+        await secureLegacy(master, "select master_set_full_access($1,false)", [
+          A,
+        ]);
         assert.equal(
           (await as(master, "select * from tasks where workspace_id=$1", [A]))
             .length,
           0,
         );
-        await as(master, "select master_set_full_access($1,true)", [A]);
+        await secureLegacy(master, "select master_set_full_access($1,true)", [
+          A,
+        ]);
         assert.ok(
           (await as(master, "select * from tasks where workspace_id=$1", [A]))
             .length > 0,
@@ -1703,14 +1750,16 @@ test("database contract", async (t) => {
           ).length > 0,
         );
         await assert.rejects(
-          as(adminA, "select master_set_full_access($1,true)", [B]),
+          secureLegacy(adminA, "select master_set_full_access($1,true)", [B]),
           /permitted/,
         );
         await assert.rejects(
           as(master, "select finance_save($1,$2)", ["expense", {}]),
           /permitted/,
         );
-        await as(master, "select master_set_full_access($1,false)", [A]);
+        await secureLegacy(master, "select master_set_full_access($1,false)", [
+          A,
+        ]);
       },
     );
     await t.test(
@@ -1826,7 +1875,7 @@ test("database contract", async (t) => {
         );
         await as(staff, "select master_open_workspace($1)", [A]);
         await assert.rejects(
-          as(staff, "select master_set_full_access($1,true)", [A]),
+          secureLegacy(staff, "select master_set_full_access($1,true)", [A]),
           /permitted/,
         );
         await assert.rejects(
@@ -1837,7 +1886,7 @@ test("database contract", async (t) => {
           /owner/,
         );
         await assert.rejects(
-          as(staff, "select master_save_workspace($1,$2)", [
+          secureLegacy(staff, "select master_save_workspace($1,$2)", [
             A,
             { name: "Forged" },
           ]),
@@ -1852,10 +1901,13 @@ test("database contract", async (t) => {
             permissions: ["view_workspaces", "edit_workspaces"],
           },
         ]);
-        await as(staff, "select master_save_workspace($1,$2)", [
+        await secureLegacy(staff, "select master_save_workspace($1,$2)", [
           A,
           {
             name: "Workspace A",
+            owner_name: "Fixture Owner",
+            industry: "Ecommerce",
+            business_phone: "+923001234567",
             legal_name: "Fixture Ltd",
             business_email: "contact@fixture.invalid",
             website: "https://fixture.invalid",
@@ -1959,7 +2011,7 @@ test("database contract", async (t) => {
     await t.test(
       "Permission matrix scopes and separate archive authorization",
       async () => {
-        await as(master, "select master_set_roles($1,$2)", [
+        await secureLegacy(master, "select master_set_roles($1,$2)", [
           A,
           ["sales_rep", "finance"],
         ]);
@@ -2097,6 +2149,93 @@ test("database contract", async (t) => {
         assert.equal(
           (await as(memberA, "select perm('leads','archive') yes"))[0].yes,
           false,
+        );
+      },
+    );
+
+    await t.test(
+      "Complete profiles require verified server actions and preserve account invariants",
+      async () => {
+        const migration = await readFile(
+          new URL(
+            "../supabase/migrations/20261012_complete_profiles.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        );
+        await owner(migration);
+        await owner(migration);
+        await assert.rejects(
+          as(master, "select master_save_workspace($1,$2)", [
+            A,
+            { name: "Bypass" },
+          ]),
+          /permission denied/,
+        );
+        await assert.rejects(
+          as(master, "select master_set_status($1,'archived','Bypass')", [A]),
+          /permission denied/,
+        );
+        await assert.rejects(
+          as(
+            master,
+            "select master_secure_action($1,'workspace_delete',$2,'{}')",
+            [master, A],
+          ),
+          /permission denied/,
+        );
+        await assert.rejects(
+          as(memberA, "select master_profile_details($1)", [adminB]),
+          /owner/,
+        );
+        const details = (
+          await as(master, "select master_profile_details($1) data", [adminA])
+        )[0].data;
+        assert.equal(details.workspace.id, A);
+        assert.equal(details.email, "admin-a@fixture.invalid");
+        await secureLegacy(master, "select master_save_workspace($1,$2)", [
+          A,
+          {
+            name: "Workspace A",
+            owner_name: "Owner A",
+            industry: "Ecommerce",
+            business_email: "owner@example.com",
+            business_phone: "+923001234567",
+          },
+        ]);
+        assert.equal(
+          (await as(master, "select master_workspace_list() data"))[0].data
+            .find((w) => w.id === A)
+            .assignments.some((p) => p.id === adminA),
+          true,
+        );
+        await db.exec("reset role;set role service_role");
+        await assert.rejects(
+          db.query(
+            "select master_secure_action($1,'member_inactive',$2,'{}')",
+            [master, adminA],
+          ),
+          /active admin/,
+        );
+        await db.query(
+          "select master_secure_action($1,'member_delete',$2,'{}')",
+          [master, memberA],
+        );
+        await db.exec("reset role");
+        const deleted = (
+          await as(master, "select master_profile_details($1) data", [memberA])
+        )[0].data;
+        assert.equal(deleted.status, "inactive");
+        assert.ok(deleted.deleted_at);
+        await db.exec("set role service_role");
+        await db.query(
+          "select master_secure_action($1,'member_restore',$2,'{}')",
+          [master, memberA],
+        );
+        await db.exec("reset role");
+        await assert.rejects(
+          as(master, "select require_business_identity($1)", [{}]),
+          /permission denied/,
         );
       },
     );

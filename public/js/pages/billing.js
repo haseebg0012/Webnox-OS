@@ -1,4 +1,12 @@
-import { businessFields, platformCan } from "./master-control.js";
+import "./member-profile.js";
+import {
+  secureMasterAction,
+  pictureField,
+  readPicture,
+  previewPicture,
+} from "../profile-tools.js";
+import { getSupabase } from "../supabase.js";
+import { businessFields, platformCan, validateBusinessForm } from "./master-control.js";
 import { registerRoute, refreshContext } from "../app.js";
 import { state, money } from "../state.js";
 import { rpc, q, api } from "../data.js";
@@ -17,7 +25,7 @@ import {
   label,
 } from "../ui.js";
 import { date, datetime, today } from "../time.js";
-import { CURRENCIES } from "../lead-options.js";
+import { CURRENCIES, COUNTRIES, existingOptions } from "../lead-options.js";
 import { ROLE_KEYS } from "../team-config.js";
 const refresh = () => dispatchEvent(new HashChangeEvent("hashchange"));
 function paymentTable(rows, workspaces = []) {
@@ -249,7 +257,7 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
     )
     .join(
       "",
-    )}</div>${w.subscription?.member_limit && stats.members > w.subscription.member_limit ? '<div class="banner">Member count exceeds the plan’s warning limit. Access remains available.</div>' : ""}<div class="tabs">${["members", "activity", "roles", "settings", ...(w.subscription ? ["billing"] : []), ...(w.full_access ? ["records"] : [])].map((t) => `<button data-tab="${t}" class="${t === "members" ? "active" : ""}">${label(t)}</button>`).join("")}</div><div data-content></div>`;
+    )}</div>${w.subscription?.member_limit && stats.members > w.subscription.member_limit ? '<div class="banner">Member count exceeds the plan’s warning limit. Access remains available.</div>' : ""}<div class="tabs">${["members", "activity", "roles", "settings", ...(w.subscription ? ["billing"] : []), ...(w.full_access ? ["records"] : [])].map((t) => `<button data-tab="${t}" class="${t === "settings" ? "active" : ""}">${label(t)}</button>`).join("")}</div><div data-content></div>`;
   const owner = (state.profile.platform_role || "owner") === "owner";
   if (!owner) el.querySelector("[data-access]").hidden = true;
   const content = el.querySelector("[data-content]");
@@ -259,7 +267,9 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
         content.innerHTML = table(
           ["Member", "Designation", "Department", "Status"],
           members.map((m) => [
-            esc(m.name),
+            owner
+              ? `<a href="#/member-profile/${m.id}">${esc(m.name)}</a>`
+              : esc(m.name),
             esc(m.job_title || "—"),
             esc(m.department || "—"),
             chip(m.status),
@@ -298,12 +308,14 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
             )
               return;
             try {
-              await rpc("master_set_roles", {
-                workspace: id,
-                roles: [...content.querySelectorAll("input:checked")].map(
-                  (x) => x.value,
-                ),
-              });
+              if (
+                !(await secureMasterAction("workspace_roles", id, {
+                  roles: [...content.querySelectorAll("input:checked")].map(
+                    (x) => x.value,
+                  ),
+                }))
+              )
+                return;
               toast("Roles updated");
             } catch (e) {
               content.querySelector(".form-error").textContent = e.message;
@@ -318,14 +330,73 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
         content.querySelector("[data-pay]").onclick = () => recordPayment(w);
         content.querySelector("[data-plan]").onclick = () => planForm(w);
       } else if (tab === "settings") {
-        content.innerHTML = `<section class="card"><dl class="kv"><dt>Business</dt><dd>${esc(w.name)}</dd><dt>Country</dt><dd>${esc(w.country || "—")}</dd><dt>Short code</dt><dd>${esc(w.short_code)}</dd><dt>Created</dt><dd>${date(w.created_at)}</dd>${Object.entries(
-          w.business_details || {},
-        )
-          .filter(([, v]) => v)
-          .map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(v)}</dd>`)
-          .join(
-            "",
-          )}</dl><div class="row wrap"><button class="btn" data-edit-workspace>Edit business details</button><button class="btn" data-message>Notify Admin</button>${w.status === "active" || w.status === "trial" ? '<button class="btn" data-status="suspended">Suspend</button>' : '<button class="btn" data-status="active">Resume</button>'}${w.status !== "archived" ? '<button class="btn" data-status="archived">Archive</button>' : ""}</div></section>`;
+        const detailRows = [
+          ["Business name", w.name],
+          ["Owner name", w.business_details?.owner_name],
+          ["Business category", w.business_details?.industry],
+          ["Business email", w.business_details?.business_email],
+          ["Business phone", w.business_details?.business_phone],
+          ["Country", w.country],
+          ["Short code", w.short_code],
+          ["Workspace slug", w.slug],
+          ["Created", date(w.created_at)],
+          ["Timezone", w.settings?.timezone],
+          ["Currency", w.settings?.app_currency],
+          ...[
+            "legal_name",
+            "website",
+            "tax_id",
+            "address",
+            "city",
+            "region",
+            "postal_code",
+            "description",
+          ].map((k) => [label(k), w.business_details?.[k]]),
+        ];
+        let logo = "";
+        if (w.logo_url) {
+          const sb = await getSupabase();
+          logo = sb.storage.from("brand").getPublicUrl(w.logo_url)
+            .data.publicUrl;
+        }
+        content.innerHTML = `<section class="card"><div class="row between"><h2>Complete business profile</h2>${logo ? `<img src="${esc(logo)}" alt="Business logo" style="width:80px;height:80px;object-fit:contain">` : ""}</div><dl class="kv">${detailRows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v || "Not supplied")}</dd>`).join("")}</dl><h3>Assigned Admin and Managers</h3>${table(
+          ["Name", "Email", "Phone", "Role", "Designation", "Status"],
+          (w.assignments || []).map((a) => [
+            owner
+              ? `<a href="#/member-profile/${a.id}">${esc(a.name)}</a>`
+              : esc(a.name),
+            esc(a.email),
+            esc(a.phone || "Not supplied"),
+            a.account_type === "admin" ? "Admin" : "Manager",
+            esc(a.job_title || "Not supplied"),
+            chip(a.status),
+          ]),
+        )}<p class="small muted">Details are read-only. Every edit or access change requires your Master password. Delete removes the business from the normal list and disables access; records remain recoverable.</p><div class="row wrap" style="margin-top:24px"><button class="btn" data-edit-workspace>Edit business details</button><button class="btn" data-logo>Upload logo</button><button class="btn" data-message>Notify Admin</button>${w.status === "active" || w.status === "trial" ? '<button class="btn" data-status="inactive">Inactive</button>' : '<button class="btn" data-status="restore">Restore active</button>'}<button class="btn" data-status="archive">Archive</button><button class="btn danger" data-status="delete">Delete</button></div></section>`;
+        content.querySelector("[data-logo]").hidden =
+          !platformCan("edit_workspaces");
+        content.querySelector("[data-logo]").onclick = () => {
+          const d = dialog(
+              "Business logo",
+              `<form class="stack">${pictureField("Business logo")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Save logo</button></form>`,
+            ),
+            form = d.querySelector("form");
+          previewPicture(form);
+          form.onsubmit = (e) => {
+            e.preventDefault();
+            busy(form.querySelector("button"), async () => {
+              try {
+                const image = await readPicture(form);
+                if (!image) throw new Error("Choose an image first.");
+                if (await secureMasterAction("workspace_logo", id, { image })) {
+                  d.close();
+                  refresh();
+                }
+              } catch (error) {
+                form.querySelector(".form-error").textContent = error.message;
+              }
+            });
+          };
+        };
         content.querySelector("[data-edit-workspace]").hidden =
           !platformCan("edit_workspaces");
         content.querySelector("[data-message]").hidden = !owner;
@@ -335,17 +406,22 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
         content.querySelector("[data-edit-workspace]").onclick = () => {
           const d = dialog(
             "Business details",
-            `<form class="stack">${field("name", "Business name", w.name, { required: true })}${field("country", "Country", w.country || "")}<div class="form-grid">${businessFields(w)}${field("timezone", "Timezone", w.settings?.timezone || "Asia/Karachi")}${field("app_currency", "Workspace currency", w.settings?.app_currency || "PKR", { options: CURRENCIES })}</div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Save business details</button></form>`,
+            `<form class="stack">${field("name", "Business name", w.name, { required: true })}${field("country", "Country", w.country || "Pakistan", { options: existingOptions(COUNTRIES, w.country), required: true })}<div class="form-grid">${businessFields(w)}${field("timezone", "Timezone", w.settings?.timezone || "Asia/Karachi", { options: existingOptions(Intl.supportedValuesOf("timeZone"), w.settings?.timezone) })}${field("app_currency", "Workspace currency", w.settings?.app_currency || "PKR", { options: CURRENCIES })}</div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Save business details</button></form>`,
           );
           const form = d.querySelector("form");
+          validateBusinessForm(form);
           form.onsubmit = (e) => {
             e.preventDefault();
             busy(form.querySelector("[type=submit]"), async () => {
               try {
-                await rpc("master_save_workspace", {
-                  workspace: id,
-                  payload: formValues(form),
-                });
+                if (
+                  !(await secureMasterAction(
+                    "workspace_edit",
+                    id,
+                    formValues(form),
+                  ))
+                )
+                  return;
                 d.close();
                 toast("Business details saved");
                 refresh();
@@ -366,11 +442,14 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
                 e.preventDefault();
                 busy(d.querySelector(".btn"), async () => {
                   try {
-                    await rpc("master_set_status", {
-                      workspace: id,
-                      status: b.dataset.status,
-                      reason: d.querySelector("textarea").value,
-                    });
+                    if (
+                      !(await secureMasterAction(
+                        "workspace_" + b.dataset.status,
+                        id,
+                        { reason: d.querySelector("textarea").value },
+                      ))
+                    )
+                      return;
                     d.close();
                     refresh();
                   } catch (e) {
@@ -461,16 +540,18 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
     )
       return;
     try {
-      await rpc("master_set_full_access", {
-        workspace: id,
-        on_off: !w.full_access,
-      });
+      if (
+        !(await secureMasterAction("workspace_access", id, {
+          enabled: !w.full_access,
+        }))
+      )
+        return;
       refresh();
     } catch (e) {
       toast(e.message, "error");
     }
   };
-  await draw("members");
+  await draw("settings");
 });
 
 addEventListener("click", (event) => {

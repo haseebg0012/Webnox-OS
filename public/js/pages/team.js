@@ -1,3 +1,4 @@
+import { pictureField, readPicture, previewPicture } from "../profile-tools.js";
 import { registerRoute } from "../app.js";
 import { loadMembers, q, rpc, api } from "../data.js";
 import { state } from "../state.js";
@@ -31,9 +32,10 @@ async function editMember(member, refresh) {
   });
   const d = dialog(
     member ? "Edit team member" : "Add team member",
-    `<form class="stack"><div class="form-grid">${field("name", "Full name", member?.name, { required: true })}${member ? "" : field("email", "Email address", "", { required: true, type: "email" })}${field("job_title", "Designation", member?.job_title || "", { required: true, help: "For example, Developer or Account manager." })}${field("department", "Department", member?.department || "", { options: ["", ...new Set([...DEPARTMENTS, member?.department].filter(Boolean))] })}${field("phone", "Phone", member?.phone || "")}</div><div><h3>Roles</h3><div class="form-grid">${roles.map((r) => `<label class="check"><input type="checkbox" name="role" value="${r}" ${member?.roles?.includes(r) ? "checked" : ""}>${ROLE_KEYS[r]}</label>`).join("")}</div></div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${member ? "Save changes" : "Create member"}</button></div></form>`,
+    `<form class="stack"><div class="form-grid">${field("first_name", "First name", member?.first_name || member?.name?.split(" ")[0] || "", { required: true })}${field("last_name", "Last name", member?.last_name || member?.name?.split(" ").slice(1).join(" ") || "", { required: true })}${member ? "" : field("email", "Email address", "", { required: true, type: "email" })}${field("job_title", "Designation", member?.job_title || "", { required: true, options: [["", "Choose a designation"], ...new Set([...DESIGNATIONS, ...catalog.map((r) => r.name), member?.job_title].filter(Boolean))] })}${field("department", "Department", member?.department || "", { options: ["", ...new Set([...DEPARTMENTS, member?.department].filter(Boolean))] })}${field("phone", "Phone", member?.phone || "", { type: "tel" })}${field("employment_start", "Joining date", member?.employment_start || new Date().toISOString().slice(0, 10), { type: "date", required: true })}${pictureField("Profile picture / logo")}</div><div><h3>Roles</h3><div class="form-grid">${roles.map((r) => `<label class="check"><input type="checkbox" name="role" value="${r}" ${member?.roles?.includes(r) ? "checked" : ""}>${ROLE_KEYS[r]}</label>`).join("")}</div></div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${member ? "Save changes" : "Create member"}</button></div></form>`,
   );
   const form = d.querySelector("form");
+  previewPicture(form);
   if (catalog.length) {
     form.insertAdjacentHTML(
       "afterbegin",
@@ -67,19 +69,27 @@ async function editMember(member, refresh) {
       form.querySelector(".form-error").textContent = "";
       try {
         const payload = formValues(form);
+        payload.name = `${payload.first_name} ${payload.last_name}`.trim();
+        payload.photo_image = await readPicture(form);
         payload.roles = [...form.querySelectorAll("[name=role]:checked")].map(
           (x) => x.value,
         );
         if (!member && payload.roles.length === 0)
           throw new Error("Choose at least one role.");
-        if (member)
+        if (member) {
           await rpc("admin_save_member", { target: member.id, payload });
-        else {
+          if (payload.photo_image)
+            await api(`/api/members/${member.id}/picture`, {
+              method: "POST",
+              body: { image: payload.photo_image },
+            });
+        } else {
           const result = await api("/api/members", {
             method: "POST",
             body: payload,
           });
           showInvites([{ ...payload, role: "Team member", url: result.url }]);
+          if (result.imageWarning) toast(result.imageWarning, "error");
         }
         d.close();
         toast(member ? "Member updated" : "Team member created");

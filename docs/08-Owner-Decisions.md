@@ -52,3 +52,8 @@ All accounts use the same personal details/password/identity layout and private 
 Lead country defaults to Pakistan; country and industry are dropdowns with broad choices and Other for industry. Email syntax and international phone format (+ followed by 8-15 digits, first nonzero) are validated in forms and database. Existing invalid contacts are not silently rewritten; unrelated changes remain allowed.
 
 Owner successfully applied `supabase/migrations/20261012_profiles_permissions.sql`; its new column and RPC were independently verified. Archive is separate from Delete. Delete still covers destructive operations such as invoice voiding, not permanent removal of history.
+
+
+## Complete business and member profiles (12 October 2026)
+
+Owner confirmed `20261012_complete_profiles.sql` applied successfully. Business creation requires owner name, business name, category, email and international phone. Master workspace details show the complete business identity and assigned Admin/Managers. Business logo and member photo uploads are supported. Member profiles open read-only; edit, inactive, archive and delete actions require current Master password verification on the server. Delete preserves history and revokes access; active Admin/Manager invariants still apply. Protected mutations use a service-only RPC; direct authenticated calls cannot bypass password verification. Passwords are never persisted or passed into SQL.

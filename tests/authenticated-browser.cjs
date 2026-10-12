@@ -232,6 +232,7 @@ function clientSource(world) {
               json: { workspace, invites: [] },
             });
         });
+        await page.route("**/api/master/members/*",route=>route.fulfill({json:{...members[0],workspace,roles:[]}}));
         const routes =
           world === "manager" ? ["profile","settings","permissions"] : world === "member" ? ["profile","settings"] : world === "master"
             ? [
@@ -250,6 +251,7 @@ function clientSource(world) {
                 "master-activity",
                 "create-workspace",
                 "workspace/" + workspace.id,
+                "member-profile/" + members[0].id,
               ]
             : [
                 "home",

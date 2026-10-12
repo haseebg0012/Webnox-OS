@@ -411,3 +411,80 @@ test("protected APIs require authentication; unknown APIs stay neutral", async (
     assert.deepEqual(await response.json(), { error: "Not found." });
   });
 });
+
+test("Master changes require the caller's password and cannot spoof the actor", async () => {
+  const id = "20000000-0000-0000-0000-000000000099",
+    target = "10000000-0000-0000-0000-000000000001";
+  let calls = [],
+    allow = true;
+  const factory = (_url, key, options) =>
+    key === configured.SUPABASE_SECRET_KEY
+      ? {
+          auth: { getUser: async () => ({ data: { user: { id } } }) },
+          rpc: async (name, args) => {
+            if (name === "check_public_rate_limit") return { data: allow };
+            calls.push({ name, args });
+            return { data: { saved: true } };
+          },
+        }
+      : options?.global
+        ? {
+            rpc: async () => ({
+              data: {
+                profile: {
+                  id,
+                  email: "owner@fixture.invalid",
+                  is_master: true,
+                  status: "active",
+                },
+              },
+            }),
+          }
+        : {
+            auth: {
+              signInWithPassword: async (p) =>
+                p.password === "correct-fixture"
+                  ? { data: { user: { id } } }
+                  : p.password === "other-fixture"
+                    ? { data: { user: { id: "different" } } }
+                    : { error: { message: "Invalid" } },
+              signOut: async () => ({ error: null }),
+            },
+          };
+  await withServer(
+    configured,
+    async (base) => {
+      const send = (password) =>
+        fetch(base + "/api/master/action", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer valid",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "workspace_archive",
+            target,
+            payload: { reason: "Fixture" },
+            password,
+            actor: "forged",
+          }),
+        });
+      for (const password of [undefined, "wrong-fixture", "other-fixture"]) {
+        const r = await send(password);
+        assert.ok([400, 403].includes(r.status));
+        assert.equal(calls.length, 0);
+        assert.ok(!(await r.text()).includes("wrong-fixture"));
+      }
+      const success = await send("correct-fixture");
+      assert.equal(success.status, 200);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].args.actor, id);
+      assert.equal(calls[0].name, "master_secure_action");
+      assert.ok(!JSON.stringify(calls).includes("password"));
+      allow = false;
+      assert.equal((await send("correct-fixture")).status, 429);
+      assert.equal(calls.length, 1);
+    },
+    factory,
+  );
+});

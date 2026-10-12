@@ -16,6 +16,7 @@ import {
 } from "../ui.js";
 import { date, datetime } from "../time.js";
 import { showInvites } from "./workspaces.js";
+import { INDUSTRIES, existingOptions } from "../lead-options.js";
 import { DEPARTMENTS } from "../team-config.js";
 export const PLATFORM_PERMISSIONS = {
   view_workspaces: "View workspaces",
@@ -37,7 +38,12 @@ function guard(permission) {
 }
 export function businessFields(w = {}) {
   const d = w.business_details || w;
-  return `${field("legal_name", "Registered / legal name", d.legal_name || "")}${field("industry", "Industry", d.industry || "")}${field("website", "Website", d.website || "", { type: "url", placeholder: "https://" })}${field("business_email", "Business email", d.business_email || "", { type: "email" })}${field("business_phone", "Business phone", d.business_phone || "", { type: "tel" })}${field("tax_id", "Tax / registration number", d.tax_id || "")}${field("address", "Street address", d.address || "", { type: "textarea", full: true })}${field("city", "City", d.city || "")}${field("region", "State / province", d.region || "")}${field("postal_code", "Postal code", d.postal_code || "")}${field("description", "About the business", d.description || "", { type: "textarea", full: true })}`;
+  return `${field("owner_name", "Owner name", d.owner_name || "", { required: true })}${field("legal_name", "Registered / legal name", d.legal_name || "")}${field("industry", "Business category", d.industry || "", { required: true, options: [["", "Choose a category"], ...existingOptions(INDUSTRIES, d.industry)] })}${field("website", "Website", d.website || "", { type: "url", placeholder: "https://" })}${field("business_email", "Business email", d.business_email || "", { type: "email", required: true })}${field("business_phone", "Business phone", d.business_phone || "", { type: "tel", required: true, placeholder: "+923001234567" })}${field("tax_id", "Tax / registration number", d.tax_id || "")}${field("address", "Street address", d.address || "", { type: "textarea", full: true })}${field("city", "City", d.city || "")}${field("region", "State / province", d.region || "")}${field("postal_code", "Postal code", d.postal_code || "")}${field("description", "About the business", d.description || "", { type: "textarea", full: true })}`;
+}
+
+export function validateBusinessForm(form) {
+ const phone=form.elements.business_phone;
+ if(phone){phone.pattern="[+][1-9][0-9]{7,14}";phone.title="Include + and the country code, followed by digits only.";}
 }
 
 async function catalogForm(kind, item = {}) {

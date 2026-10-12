@@ -1,7 +1,7 @@
 import express from "express";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 
@@ -46,7 +46,7 @@ export function createApp(env = process.env, clientFactory = createClient) {
   const app = express();
   app.disable("x-powered-by");
   app.disable("etag");
-  app.use(express.json({ limit: "128kb" }));
+  app.use(express.json({ limit: "512kb" }));
   app.use("/api", (_req, res, next) => {
     res.set("Cache-Control", "no-store");
     next();
@@ -427,6 +427,127 @@ export function createApp(env = process.env, clientFactory = createClient) {
       );
     }
   });
+  async function verifyMasterPassword(req) {
+    const password = req.body?.password;
+    if (typeof password !== "string" || !password || password.length > 1024)
+      throw fail("Enter your current Master password.", 400);
+    const limited = await rpc(service(), "check_public_rate_limit", {
+      bucket_key: `master-password:${req.context.profile.id}`,
+      max_hits: 5,
+    });
+    if (!limited) throw fail("Too many attempts. Please wait a minute.", 429);
+    const verifier = clientFactory(
+      config.supabaseUrl,
+      config.supabasePublishableKey,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const result = await verifier.auth.signInWithPassword({
+      email: req.context.profile.email,
+      password,
+    });
+    delete req.body.password;
+    if (result.error || result.data?.user?.id !== req.context.profile.id)
+      throw fail("Master password could not be verified.", 403);
+    // Revoke only the temporary verification session, never the user's active session.
+    await verifier.auth.signOut({ scope: "local" });
+  }
+  async function uploadPicture(db, bucket, folder, value) {
+    if (
+      typeof value !== "string" ||
+      !/^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(value)
+    )
+      throw fail("Choose a valid profile picture or logo.");
+    const buffer = Buffer.from(value.split(",")[1], "base64");
+    if (
+      buffer.length > 100000 ||
+      buffer.length < 16 ||
+      buffer.toString("ascii", 0, 4) !== "RIFF" ||
+      buffer.toString("ascii", 8, 12) !== "WEBP"
+    )
+      throw fail("Image must be a WebP smaller than 100 KB.");
+    const path = `${folder}/${randomUUID()}.webp`;
+    const result = await db.storage
+      .from(bucket)
+      .upload(path, buffer, { contentType: "image/webp", upsert: false });
+    if (result.error) throw fail("Image upload failed. Please retry.");
+    return path;
+  }
+  app.post("/api/master/action", async (req, res, next) => {
+    try {
+      const { action, target, payload = {} } = req.body || {};
+      if (
+        !/^[0-9a-f-]{36}$/i.test(target || "") ||
+        ![
+          "workspace_edit",
+          "workspace_inactive",
+          "workspace_archive",
+          "workspace_delete",
+          "workspace_restore",
+          "workspace_roles",
+          "workspace_access",
+          "workspace_logo",
+          "member_edit",
+          "member_inactive",
+          "member_archive",
+          "member_delete",
+          "member_restore",
+        ].includes(action)
+      )
+        throw fail("Choose a valid action.");
+      await verifyMasterPassword(req);
+      let picture, pictureBucket = "brand";
+      if (action === "workspace_logo") {
+        if (
+          !(await rpc(req.db, "platform_can", {
+            permission: "edit_workspaces",
+          }))
+        )
+          throw fail("Access is not permitted.", 403);
+        picture = await uploadPicture(
+          service(),
+          "brand",
+          `w${target}`,
+          payload.image,
+        );
+      }
+      if(action === "member_edit" && payload.image) {
+        if(!(await rpc(req.db,"is_master",{}))) throw fail("Only the platform owner can change business profiles.",403);
+        await rpc(req.db,"master_profile_details",{target});
+        pictureBucket="avatars";picture=await uploadPicture(service(),pictureBucket,target,payload.image);
+      }
+      try {
+        res.json(
+          await rpc(service(), "master_secure_action", {
+            actor: req.context.profile.id,
+            action,
+            target,
+            payload: picture ? (pictureBucket === "brand" ? {path:picture} : {...payload,image:undefined,avatar_path:picture}) : payload,
+          }),
+        );
+      } catch (error) {
+        if (picture) await service().storage.from(pictureBucket).remove([picture]);
+        throw error;
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/api/master/members/:id", async (req, res, next) => {
+    try {
+      const p = await rpc(req.db, "master_profile_details", {
+        target: req.params.id,
+      });
+      if (p.avatar_path) {
+        const signed = await service()
+          .storage.from("avatars")
+          .createSignedUrl(p.avatar_path, 300);
+        if (!signed.error) p.avatar_url = signed.data.signedUrl;
+      }
+      res.json(p);
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get("/api/master/workspaces", async (req, res, next) => {
     try {
       res.json(await rpc(req.db, "master_workspace_list", {}));
@@ -447,6 +568,14 @@ export function createApp(env = process.env, clientFactory = createClient) {
       siteUrl();
       const p = req.body || {};
       p.name = textField(p.name, "business name");
+      p.owner_name = textField(p.owner_name, "owner name");
+      p.industry = textField(p.industry, "business category");
+      p.business_email = email(p.business_email);
+      p.business_phone = textField(p.business_phone, "business phone", 16);
+      if (!/^\+[1-9][0-9]{7,14}$/.test(p.business_phone))
+        throw fail(
+          "Business phone must include + and country code, followed by digits.",
+        );
       p.slug = textField(p.slug, "workspace slug", 64);
       p.short_code = textField(p.short_code, "short code", 4);
       p.admin_name = textField(p.admin_name, "admin name");
@@ -493,7 +622,28 @@ export function createApp(env = process.env, clientFactory = createClient) {
       const workspace = await rpc(req.db, "master_create_workspace", {
         payload: { ...p, admin_id: admin.id, manager_id: manager.id },
       });
+      let imageWarning;
+      if (p.logo_image) {
+        try {
+          const path = await uploadPicture(
+            db,
+            "brand",
+            `w${workspace.id}`,
+            p.logo_image,
+          );
+          await rpc(db, "master_secure_action", {
+            actor: req.context.profile.id,
+            action: "workspace_logo",
+            target: workspace.id,
+            payload: { path },
+          });
+        } catch {
+          imageWarning =
+            "Workspace created, but logo upload failed. Open business details to retry.";
+        }
+      }
       res.status(201).json({
+        imageWarning,
         workspace,
         invites: [
           {
@@ -557,9 +707,55 @@ export function createApp(env = process.env, clientFactory = createClient) {
         target: user.id,
         payload: p,
       });
-      res.status(201).json({ member, url });
+      let imageWarning;
+      if (p.photo_image) {
+        try {
+          const path = await uploadPicture(
+            db,
+            "avatars",
+            user.id,
+            p.photo_image,
+          );
+          const saved = await db
+            .from("profiles")
+            .update({ avatar_path: path })
+            .eq("id", user.id)
+            .eq("workspace_id", req.context.workspace.id);
+          if (saved.error) throw saved.error;
+        } catch {
+          imageWarning =
+            "Member created, but picture upload failed. Edit the member to retry.";
+        }
+      }
+      res.status(201).json({ member, url, imageWarning });
     } catch (error) {
       if (db) await cleanupUnprovisioned(db, created).catch(() => {});
+      next(error);
+    }
+  });
+  app.post("/api/members/:id/picture", async (req, res, next) => {
+    try {
+      const r = await req.db
+        .from("profiles")
+        .select("id")
+        .eq("id", req.params.id)
+        .eq("workspace_id", req.context.workspace.id)
+        .maybeSingle();
+      if (!r.data) throw fail("Member not found.", 404);
+      const path = await uploadPicture(
+        service(),
+        "avatars",
+        r.data.id,
+        req.body.image,
+      );
+      const result = await service()
+        .from("profiles")
+        .update({ avatar_path: path })
+        .eq("id", r.data.id)
+        .eq("workspace_id", req.context.workspace.id);
+      if (result.error) throw fail("Could not save picture.");
+      res.json({ saved: true });
+    } catch (error) {
       next(error);
     }
   });

@@ -17,7 +17,16 @@ import {
   downloadCSV,
 } from "../ui.js";
 import { date, today } from "../time.js";
-import { STAGES, CURRENCIES, SERVICES, SOURCES } from "../lead-options.js";
+import {
+  STAGES,
+  CURRENCIES,
+  SERVICES,
+  SOURCES,
+  COUNTRIES,
+  INDUSTRIES,
+  existingOptions,
+  validateContactForm,
+} from "../lead-options.js";
 const refresh = () => dispatchEvent(new HashChangeEvent("hashchange"));
 const manager = () => state.isAdmin || state.roles.includes("manager");
 export async function clientForm(client) {
@@ -32,10 +41,11 @@ async function crmForm(kind, record) {
   );
   const d = dialog(
     `${record ? "Edit" : "New"} ${lead ? "lead" : "client"}`,
-    `<form class="stack"><div class="form-grid">${field("name", "Name", r.name || "", { required: !lead })}${field("company", "Company", r.company || "", { required: true })}${field("email", "Email", r.email || "", { type: "email" })}${field("phone", "Phone", r.phone || "")}${field("website", "Website", r.website || "")}${field("country", "Country", r.country || "")}${lead ? `${field("niche", "Industry / niche", r.niche || "")}${field("service", "Service", r.service || "", { options: [["", "Choose a service"], ...SERVICES] })}` : `${field("address", "Address", r.address || "", { type: "textarea", full: true })}${field("services", "Services", r.services || "")}${field("onboarding_date", "Onboarding date", r.onboarding_date || today(), { type: "date" })}`}${field("currency", "Currency", r.currency || state.settings.app_currency, { options: CURRENCIES })}${field(lead ? "budget" : "monthly_retainer", lead ? "Budget" : "Monthly retainer", lead ? r.budget || 0 : r.monthly_retainer || 0, { type: "number", min: 0, step: ".01" })}${lead ? `${field("source", "Source", r.source || "Other", { options: SOURCES })}${field("stage", "Stage", r.stage || "new", { options: STAGES })}${field("priority", "Priority", r.priority || "medium", { options: ["low", "medium", "high", "urgent"] })}${field("follow_up_date", "Follow-up date", r.follow_up_date || "", { type: "date" })}${manager() || state.roles.includes("sales_rep") ? field("agent_id", "Sales Representative", r.agent_id || "", { options: [["", "Not assigned yet"], ...sales.map((m) => [m.id, m.name])] }) : ""}` : field("status", "Status", r.status || "active", { options: ["active", "paused", "archived"] })}${field("notes", "Notes", r.notes || "", { type: "textarea", full: true })}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${record ? "Save changes" : lead ? "Add lead" : "Add client"}</button></div></form>`,
+    `<form class="stack"><div class="form-grid">${field("name", "Name", r.name || "", { required: !lead })}${field("company", "Company", r.company || "", { required: true })}${field("email", "Email", r.email || "", { type: "email" })}${field("phone", "Phone", r.phone || "", { type: "tel", placeholder: "+923001234567", help: "Include + and country code; digits only." })}${field("website", "Website", r.website || "")}${field("country", "Country", r.country || "Pakistan", { options: existingOptions(COUNTRIES, r.country) })}${lead ? `${field("niche", "Industry / niche", r.niche || "", { options: [["", "Choose an industry"], ...existingOptions(INDUSTRIES, r.niche)] })}${field("service", "Service", r.service || "", { options: [["", "Choose a service"], ...SERVICES] })}` : `${field("address", "Address", r.address || "", { type: "textarea", full: true })}${field("services", "Services", r.services || "")}${field("onboarding_date", "Onboarding date", r.onboarding_date || today(), { type: "date" })}`}${field("currency", "Currency", r.currency || state.settings.app_currency, { options: CURRENCIES })}${field(lead ? "budget" : "monthly_retainer", lead ? "Budget" : "Monthly retainer", lead ? r.budget || 0 : r.monthly_retainer || 0, { type: "number", min: 0, step: ".01" })}${lead ? `${field("source", "Source", r.source || "Other", { options: SOURCES })}${field("stage", "Stage", r.stage || "new", { options: STAGES })}${field("priority", "Priority", r.priority || "medium", { options: ["low", "medium", "high", "urgent"] })}${field("follow_up_date", "Follow-up date", r.follow_up_date || "", { type: "date" })}${manager() || state.roles.includes("sales_rep") ? field("agent_id", "Sales Representative", r.agent_id || "", { options: [["", "Not assigned yet"], ...sales.map((m) => [m.id, m.name])] }) : ""}` : field("status", "Status", r.status || "active", { options: ["active", "paused", "archived"] })}${field("notes", "Notes", r.notes || "", { type: "textarea", full: true })}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${record ? "Save changes" : lead ? "Add lead" : "Add client"}</button></div></form>`,
     { wide: true },
   );
   const form = d.querySelector("form");
+  validateContactForm(form);
   form.onsubmit = (e) => {
     e.preventDefault();
     busy(form.querySelector("[type=submit]"), async () => {
@@ -80,7 +90,7 @@ async function openLead(id) {
         .map(([k, v]) => `<dt>${k}</dt><dd>${esc(v || "—")}</dd>`)
         .join(
           "",
-        )}</dl><p style="white-space:pre-wrap">${esc(l.notes || "")}</p><div class="row wrap">${can("leads", "edit") && !l.client_id ? '<button class="btn" data-edit>Edit lead</button>' : ""}${can("leads", "edit") && !l.agent_id && state.roles.includes("sales_rep") ? '<button class="btn" data-take>Take this lead</button>' : ""}${l.stage === "won" && !l.client_id && manager() ? '<button class="btn primary" data-convert>Convert to client</button>' : ""}${l.client_id ? `<a class="btn primary" href="#/client/${l.client_id}" data-client>Open client</a>` : ""}${can("leads", "delete") ? '<button class="btn" data-archive>Archive</button>' : ""}</div>`,
+        )}</dl><p style="white-space:pre-wrap">${esc(l.notes || "")}</p><div class="row wrap">${can("leads", "edit") && !l.client_id ? '<button class="btn" data-edit>Edit lead</button>' : ""}${can("leads", "edit") && !l.agent_id && state.roles.includes("sales_rep") ? '<button class="btn" data-take>Take this lead</button>' : ""}${l.stage === "won" && !l.client_id && manager() ? '<button class="btn primary" data-convert>Convert to client</button>' : ""}${l.client_id ? `<a class="btn primary" href="#/client/${l.client_id}" data-client>Open client</a>` : ""}${can("leads", "archive") ? '<button class="btn" data-archive>Archive</button>' : ""}</div>`,
       { drawer: true },
     );
     d.querySelector("[data-edit]")?.addEventListener("click", () => {

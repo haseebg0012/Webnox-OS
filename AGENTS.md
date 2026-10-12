@@ -46,3 +46,10 @@ Owner Master email: haseebg0012@gmail.com. First workspace Admin: Webnox Hub, we
 ## Master control center release
 
 The 12 October Master redesign and operational profile/catalog/platform-team forms are implemented and tested. Additive migration: `supabase/migrations/20261012_master_control.sql` (also included in full schema). Standalone migration tested twice against be8f4f1 schema with existing owner preserved. Owner applied the migration successfully on 12 October; live columns, 8 catalog roles and the private avatar bucket are independently verified. Release checks: 30 database/API checks and local database-backed Master/business workflows passed. Never implement the reference's plaintext password localStorage fallback. Platform delegation is owner-only; scoped platform staff never inherit `is_master()` owner permissions.
+
+
+## Universal profile and permissions update - 12 October 2026
+
+Owner requested a shared profile layout, anchored account dropdown, subtle grey workspace background, permission matrices with On/Off switches, and validated lead contacts with country/industry choices. Implemented in plain ES modules. Admin edits workspace permissions; Manager and Master can inspect them without receiving additional tenant privileges. Delete and Archive are separate database permissions; records remain preserved. Lead validation is enforced by a database trigger for new/changed contact fields, including public submissions and imports; unrelated edits to legacy contacts remain possible.
+
+Migration `supabase/migrations/20261012_profiles_permissions.sql` is included in full schema, tested twice against the previous release, and applied successfully by the owner. Live archive column and permission_matrix RPC verified. Shared profile saves never change email, tenant or authority. Avatar storage remains private to each active account.

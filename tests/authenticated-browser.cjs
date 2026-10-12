@@ -52,7 +52,7 @@ function clientSource(world) {
           status: "active",
           account_type: "master",
         }
-      : members[0];
+      : world === "manager" ? members[1] : world === "member" ? {...members[1],name:"Fixture Member",roles:[]} : members[0];
   const context = {
     profile,
     workspace: world === "master" ? null : workspace,
@@ -65,7 +65,7 @@ function clientSource(world) {
       pause_days: 14,
       invoice_details: {},
     },
-    roles: [],
+    roles: world === "manager" ? ["manager"] : [],
     permissions: [],
   };
 
@@ -133,6 +133,7 @@ function clientSource(world) {
     amount: 5000,
   };
   const tables = {
+    workspaces: [workspace],
     master_member_list: members,
     workspace_roles: ["sales_rep", "finance", "project_manager"].map(
       (role_key) => ({ role_key, active: true }),
@@ -146,6 +147,8 @@ function clientSource(world) {
   };
   const responses = {
     boot_context: context,
+    master_workspace_list: [workspace],
+    permission_matrix: { roles: tables.workspace_roles, permissions: [] },
     master_team_list: [
       {
         ...profile,
@@ -204,7 +207,7 @@ function clientSource(world) {
   const base = process.env.TEST_URL || "http://localhost:3000";
   let checks = 0;
   try {
-    for (const world of ["master", "business"])
+    for (const world of ["master", "business", "manager", "member"])
       for (const width of [390, 768, 1024, 1440]) {
         const page = await browser.newPage({
           viewport: { width, height: 900 },
@@ -230,7 +233,7 @@ function clientSource(world) {
             });
         });
         const routes =
-          world === "master"
+          world === "manager" ? ["profile","settings","permissions"] : world === "member" ? ["profile","settings"] : world === "master"
             ? [
                 "master-home",
                 "master-workspaces",
@@ -240,6 +243,7 @@ function clientSource(world) {
                 "master-finance/invoices",
                 "master-settings",
                 "master-profile",
+                "permissions",
                 "master-team",
                 "master-roles",
                 "master-templates",
@@ -249,6 +253,7 @@ function clientSource(world) {
               ]
             : [
                 "home",
+                "profile",
                 "tasks",
                 "activity",
                 "reports",
@@ -355,7 +360,7 @@ function clientSource(world) {
             await page.locator("input[name=slug]").inputValue(),
             "new-fixture",
           );
-        } else {
+        } else if (world === "business") {
           await page.goto(base + "/#/tasks");
           await page
             .getByRole("button", { name: "Create task", exact: true })

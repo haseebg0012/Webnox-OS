@@ -1,5 +1,11 @@
 import { field, esc, formValues, busy, empty } from "./ui.js";
-import { CURRENCIES, SERVICES } from "./lead-options.js";
+import {
+  CURRENCIES,
+  SERVICES,
+  COUNTRIES,
+  INDUSTRIES,
+  validateContactForm,
+} from "./lead-options.js";
 const el = document.querySelector("#lead-form-page"),
   token = new URLSearchParams(location.search).get("token") || "";
 try {
@@ -9,8 +15,9 @@ try {
   const brand = await response.json();
   if (!response.ok) throw new Error(brand.error);
   document.title = "Contact " + brand.name;
-  el.innerHTML = `<div class="page-heading"><div><p class="eyebrow">${esc(brand.name)}</p><h1>Tell us about your business</h1><p>Share a few details and our team will get in touch.</p></div></div><form class="card stack"><div class="form-grid">${field("name", "Your name", "", { required: true })}${field("company", "Company", "", { required: true })}${field("email", "Email", "", { type: "email", required: true })}${field("phone", "Phone")}${field("website", "Website")}${field("country", "Country")}${field("niche", "Industry / niche")}${field("service", "Interested in", "", { options: [["", "Choose a service"], ...SERVICES] })}${field("currency", "Currency", "PKR", { options: CURRENCIES })}${field("budget", "Estimated budget", "", { type: "number", min: 0, step: ".01" })}${field("notes", "Anything else we should know?", "", { type: "textarea", full: true })}</div><div class="honeypot" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off"></label></div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Send enquiry</button><p class="small muted">Your details will be shared with ${esc(brand.name)} to respond to your enquiry.</p></form>`;
+  el.innerHTML = `<div class="page-heading"><div><p class="eyebrow">${esc(brand.name)}</p><h1>Tell us about your business</h1><p>Share a few details and our team will get in touch.</p></div></div><form class="card stack"><div class="form-grid">${field("name", "Your name", "", { required: true })}${field("company", "Company", "", { required: true })}${field("email", "Email", "", { type: "email", required: true })}${field("phone", "Phone", "", { type: "tel", placeholder: "+923001234567", help: "Include + and country code; digits only." })}${field("website", "Website")}${field("country", "Country", "Pakistan", { options: COUNTRIES })}${field("niche", "Industry / niche", "", { options: [["", "Choose an industry"], ...INDUSTRIES] })}${field("service", "Interested in", "", { options: [["", "Choose a service"], ...SERVICES] })}${field("currency", "Currency", "PKR", { options: CURRENCIES })}${field("budget", "Estimated budget", "", { type: "number", min: 0, step: ".01" })}${field("notes", "Anything else we should know?", "", { type: "textarea", full: true })}</div><div class="honeypot" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off"></label></div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Send enquiry</button><p class="small muted">Your details will be shared with ${esc(brand.name)} to respond to your enquiry.</p></form>`;
   const form = el.querySelector("form");
+  validateContactForm(form);
   form.onsubmit = (e) => {
     e.preventDefault();
     busy(form.querySelector("[type=submit]"), async () => {

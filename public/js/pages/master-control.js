@@ -185,7 +185,7 @@ function teamForm(member) {
     )
       .map(
         ([k, v]) =>
-          `<label class="check permission-choice"><input type="checkbox" name="permission" value="${k}" ${member?.platform_permissions?.includes(k) ? "checked" : ""}>${v}</label>`,
+          `<div class="permission-choice row between"><span>${v}</span><button type="button" class="permission-switch" role="switch" aria-label="${v}" aria-checked="${!!member?.platform_permissions?.includes(k)}" data-permission="${k}"><span></span><b>${member?.platform_permissions?.includes(k) ? "On" : "Off"}</b></button></div>`,
       )
       .join(
         "",
@@ -193,6 +193,14 @@ function teamForm(member) {
     { wide: true },
   );
   const form = d.querySelector("form");
+  form.querySelectorAll("[data-permission]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const on = b.getAttribute("aria-checked") !== "true";
+        b.setAttribute("aria-checked", String(on));
+        b.querySelector("b").textContent = on ? "On" : "Off";
+      }),
+  );
   form.onsubmit = (e) => {
     e.preventDefault();
     busy(form.querySelector("[type=submit]"), async () => {
@@ -200,8 +208,8 @@ function teamForm(member) {
         const payload = {
           ...formValues(form),
           permissions: [
-            ...form.querySelectorAll("[name=permission]:checked"),
-          ].map((i) => i.value),
+            ...form.querySelectorAll('[data-permission][aria-checked="true"]'),
+          ].map((i) => i.dataset.permission),
         };
         if (member)
           await rpc("master_team_save", { target: member.id, payload });

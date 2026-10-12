@@ -1888,6 +1888,218 @@ test("database contract", async (t) => {
         );
       },
     );
+
+    await t.test(
+      "Universal profiles preserve authority and private avatar ownership",
+      async () => {
+        await as(memberA, "select save_profile($1)", [
+          {
+            name: "Updated Member",
+            first_name: "Updated",
+            last_name: "Member",
+            phone: "+923001234567",
+            date_of_birth: "1995-01-01",
+            id: adminB,
+            is_master: true,
+            account_type: "admin",
+            email: "forged@example.com",
+          },
+        ]);
+        const p = (await as(memberA, "select boot_context() data"))[0].data
+          .profile;
+        assert.equal(p.first_name, "Updated");
+        assert.equal(p.is_master, false);
+        assert.equal(p.account_type, "member");
+        assert.equal(p.email, "member-a@fixture.invalid");
+        assert.equal(
+          (await as(adminB, "select boot_context() data"))[0].data.profile.name,
+          "Admin B",
+        );
+        const path = `${memberA}/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.webp`;
+        await as(
+          memberA,
+          "insert into storage.objects(bucket_id,name) values('avatars',$1)",
+          [path],
+        );
+        await as(memberA, "select save_profile($1)", [
+          { name: "Updated Member", avatar_path: path },
+        ]);
+        await assert.rejects(
+          as(adminB, "select save_profile($1)", [
+            { name: "Admin B", avatar_path: path },
+          ]),
+          /image/,
+        );
+        await assert.rejects(
+          as(
+            adminB,
+            "insert into storage.objects(bucket_id,name) values('avatars',$1)",
+            [`${memberA}/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.webp`],
+          ),
+          /row-level/,
+        );
+        assert.equal(
+          (
+            await as(
+              adminB,
+              "select * from storage.objects where bucket_id='avatars' and name=$1",
+              [path],
+            )
+          ).length,
+          0,
+        );
+        await assert.rejects(
+          as(memberA, "select save_profile($1)", [
+            { name: "Member", date_of_birth: "2200-01-01" },
+          ]),
+          /date of birth/,
+        );
+      },
+    );
+    await t.test(
+      "Permission matrix scopes and separate archive authorization",
+      async () => {
+        await as(master, "select master_set_roles($1,$2)", [
+          A,
+          ["sales_rep", "finance"],
+        ]);
+        await as(managerA, "select permission_matrix($1)", [A]);
+        await as(master, "select permission_matrix($1)", [B]);
+        await assert.rejects(
+          as(managerA, "select permission_matrix($1)", [B]),
+          /permitted/,
+        );
+        await assert.rejects(
+          as(memberA, "select permission_matrix($1)", [A]),
+          /permitted/,
+        );
+        await as(adminA, "select save_permissions($1)", [
+          [
+            {
+              role_key: "sales_rep",
+              module: "leads",
+              view: true,
+              edit: true,
+              delete: false,
+              archive: true,
+            },
+          ],
+        ]);
+        assert.equal(
+          (await as(memberA, "select perm('leads','archive') yes"))[0].yes,
+          true,
+        );
+        assert.equal(
+          (await as(memberA, "select perm('leads','delete') yes"))[0].yes,
+          false,
+        );
+        const lead = (
+          await as(memberA, "select lead_save($1) data", [
+            { company: "Archive fixture" },
+          ])
+        )[0].data;
+        await as(memberA, "select lead_archive($1)", [lead.id]);
+        await as(adminA, "select save_permissions($1)", [
+          [
+            {
+              role_key: "sales_rep",
+              module: "leads",
+              view: true,
+              edit: true,
+              delete: true,
+              archive: false,
+            },
+          ],
+        ]);
+        await assert.rejects(
+          as(memberA, "select lead_archive($1)", [lead.id]),
+          /permitted/,
+        );
+        await assert.rejects(
+          as(adminA, "select save_permissions($1)", [
+            [
+              {
+                role_key: "sales_rep",
+                module: "leads",
+                view: false,
+                archive: true,
+              },
+            ],
+          ]),
+          /View permission/,
+        );
+      },
+    );
+    await t.test(
+      "Lead contact validation covers RPC and public submissions without breaking historical updates",
+      async () => {
+        for (const email of [
+          "no-email",
+          "wrong@host.x",
+          "a@-host.com",
+          "a b@example.com",
+        ])
+          await assert.rejects(
+            as(adminA, "select lead_save($1)", [{ company: "Invalid", email }]),
+            /valid email/,
+          );
+        for (const phone of [
+          "122131",
+          "923001234567",
+          "+92 abc",
+          "+00123456789",
+        ])
+          await assert.rejects(
+            as(adminA, "select lead_save($1)", [{ company: "Invalid", phone }]),
+            /country code/,
+          );
+        const lead = (
+          await as(adminA, "select lead_save($1) data", [
+            {
+              company: "Valid contact",
+              email: "person+sales@example.com",
+              phone: "+923001234567",
+            },
+          ])
+        )[0].data;
+        assert.equal(lead.country, "Pakistan");
+        const token = (
+          await as(
+            adminA,
+            "select public_form_token from workspaces where id=$1",
+            [A],
+          )
+        )[0].public_form_token;
+        await owner("set role service_role");
+        await assert.rejects(
+          db.query("select public_lead_submit($1,$2)", [
+            token,
+            { company: "Public invalid", email: "no-email" },
+          ]),
+          /valid email/,
+        );
+        await db.exec("reset role");
+        await owner(
+          `alter table leads disable trigger validate_contact;update leads set email='legacy-invalid' where id='${lead.id}';alter table leads enable trigger validate_contact;`,
+        );
+        await as(adminA, "select lead_save($1)", [
+          { id: lead.id, notes: "Unrelated edit" },
+        ]);
+        const migration = await readFile(
+          new URL(
+            "../supabase/migrations/20261012_profiles_permissions.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        );
+        await owner(migration);
+        await owner(migration);
+        assert.equal(
+          (await as(memberA, "select perm('leads','archive') yes"))[0].yes,
+          false,
+        );
+      },
+    );
   } finally {
     await db.close();
   }

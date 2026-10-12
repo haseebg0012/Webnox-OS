@@ -15,7 +15,6 @@ import {
 import { datetime, today } from "../time.js";
 
 export async function refreshMasterIdentity() {
-  if (!state.isMaster) return;
   const sb = await getSupabase();
   let image = "";
   if (state.profile.avatar_path) {
@@ -143,22 +142,25 @@ async function cropPicture(file, save) {
   draw();
 }
 
-registerRoute("master-profile", "Master Profile", async (el) => {
-  if (!state.isMaster) throw new Error("Access is not permitted.");
+async function renderProfile(el) {
   const sb = await getSupabase();
   const auth = await sb.auth.getUser();
   if (auth.error) throw auth.error;
   const user = auth.data.user,
     p = state.profile;
-  const role = p.platform_role || "owner";
-  el.innerHTML = `<div class="master-profile"><section class="card profile-banner row between wrap"><div class="row"><span class="profile-portrait" data-master-avatar>${avatar(p.name, true)}</span><div><div class="row wrap"><h1 data-master-name>${esc(p.name)}</h1><span class="chip">Platform ${esc(role)}</span></div><p class="small muted">${esc(user.email)}</p><div class="small" data-verified-banner></div><div class="small muted">Last sign in: ${datetime(user.last_sign_in_at)}</div></div></div><button class="btn" data-upload>${icon("download")} Upload picture</button><input hidden type="file" accept="image/jpeg,image/png,image/webp" data-picture></section><div class="profile-columns"><div class="stack"><section class="card"><h2>Master Profile Information</h2><p class="muted small">Manage your identity and contact details.</p><form data-profile class="stack"><div class="form-grid">${field("first_name", "First name", p.first_name ?? p.name.split(" ")[0], { required: true })}${field("last_name", "Last name", p.last_name ?? p.name.split(" ").slice(1).join(" "))}${field("name", "Display name", p.name, { required: true })}<label class="field"><span>Master email (immutable)</span><input type="email" readonly disabled value="${esc(user.email)}"></label>${field("phone", "Phone number", p.phone || "", { type: "tel" })}${field("date_of_birth", "Date of birth", p.date_of_birth || "", { type: "date", max: today(), min: "1900-01-01" })}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary">Save profile changes</button></div></form></section><section class="card"><h2>${icon("lock")} Master Password & Security</h2><p class="muted small">Confirm your current password to update your Supabase Auth credentials.</p><form data-password class="stack">${field("current_password", "Current password", "", { type: "password", required: true })}${field("password", "New password", "", { type: "password", required: true, help: "Use at least 8 characters." })}${field("confirmation", "Confirm new password", "", { type: "password", required: true })}<p class="form-error" role="alert"></p><p class="success small" role="status"></p><div class="form-actions"><button class="btn primary">Update Master password</button></div></form></section></div><aside class="stack"><section class="card"><h2>Email Verification Status</h2><div data-verification></div><p class="small" role="status" data-verification-notice></p><button class="btn" data-resend>Resend verification email</button><button class="text-button" data-refresh-verification>Refresh status</button></section><section class="card"><h2>Platform Session Info</h2><dl class="kv"><dt>Access level</dt><dd>Platform ${esc(role)}</dd><dt>Authentication</dt><dd>Supabase Auth · signed JWT</dd><dt>Transport</dt><dd>${location.protocol === "https:" ? "HTTPS / TLS" : "Local development HTTP"}</dd><dt>Tenant isolation</dt><dd>Database RLS policies</dd></dl><p class="small muted">Business access remains limited by your platform permissions. Salaries remain private.</p></section></aside></div></div>`;
+  const role = state.isMaster
+    ? `Platform ${p.platform_role || "owner"}`
+    : state.isAdmin
+      ? "Admin"
+      : state.roles.join(", ").replaceAll("_", " ") || "Team member";
+  el.innerHTML = `<div class="universal-profile"><div class="page-heading"><div><h1>Profile</h1><p>Your details, roles and password.</p></div></div><div class="profile-columns"><div class="stack"><section class="card profile-card"><h2>Personal details</h2><form data-profile class="stack"><div class="form-grid">${field("first_name", "First name", p.first_name || p.name.split(" ")[0], { required: true })}${field("last_name", "Last name", p.last_name ?? p.name.split(" ").slice(1).join(" "))}<label class="field"><span>Email (read-only)</span><input type="email" readonly value="${esc(user.email)}" aria-label="Email (read-only)"></label>${field("phone", "Phone number", p.phone || "", { type: "tel" })}${field("name", "Display name", p.name, { required: true })}${field("date_of_birth", "Date of birth", p.date_of_birth || "", { type: "date", max: today(), min: "1900-01-01" })}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary">Save profile changes</button></div></form></section><section class="card profile-card"><h2>Password & security</h2><form data-password class="stack">${field("current_password", "Current password", "", { type: "password", required: true })}<div class="form-grid">${field("password", "New password", "", { type: "password", required: true, help: "Use at least 8 characters." })}${field("confirmation", "Confirm new password", "", { type: "password", required: true })}</div><p class="form-error" role="alert"></p><p class="success small" role="status"></p><div class="form-actions"><button class="btn">${state.isMaster ? "Update Master password" : "Change password"}</button></div></form></section></div><aside class="stack"><section class="card profile-identity"><div class="row"><span class="profile-portrait" data-master-avatar>${avatar(p.name, true)}</span><div class="grow"><h2 data-master-name>${esc(p.name)}</h2><p class="muted small">${esc(user.email)}</p></div></div><button class="btn" data-upload>Upload picture</button><input hidden type="file" accept="image/jpeg,image/png,image/webp" data-picture><dl class="kv"><dt>${state.isMaster ? "Access level" : "Employee ID"}</dt><dd>${esc(state.isMaster ? role : p.employee_id || "—")}</dd><dt>Job title</dt><dd>${esc(state.isMaster ? role : p.job_title || "—")}</dd><dt>Department</dt><dd>${esc(state.isMaster ? "Platform" : p.department || "—")}</dd><dt>Joined</dt><dd>${datetime(p.joined_at || p.created_at)}</dd></dl><h3>My roles</h3><div class="row wrap">${(state.isMaster ? [role] : [...(state.isAdmin ? ["Admin"] : []), ...state.roles]).map((r) => `<span class="chip">${esc(r.replaceAll("_", " "))}</span>`).join("")}</div><p class="small muted">${state.isMaster ? "Platform access follows your assigned permissions." : "Your admin manages your roles, job title and department."}</p><div class="small" data-verified-banner></div></section>${!state.isMaster ? `<section class="card"><h2>How tracking works</h2><p class="small">Webnox OS records sign-in sessions, active and idle time, and task timers. It does not record what you type or take screenshots.</p><a href="#/activity">View my activity</a></section>` : ""}<section class="card"><h2>Email verification</h2><div data-verification></div><p class="small" role="status" data-verification-notice></p><button class="btn" data-resend>Resend verification email</button><button class="text-button" data-refresh-verification>Refresh status</button></section><section class="card"><h2>Session information</h2><dl class="kv"><dt>Access level</dt><dd>${esc(role)}</dd><dt>Authentication</dt><dd>Supabase Auth · signed JWT</dd><dt>Transport</dt><dd>${location.protocol === "https:" ? "HTTPS / TLS" : "Local development HTTP"}</dd><dt>Tenant isolation</dt><dd>Database RLS policies</dd><dt>Last sign in</dt><dd>${datetime(user.last_sign_in_at)}</dd></dl></section></aside></div></div>`;
   await refreshMasterIdentity();
   const profile = el.querySelector("[data-profile]");
   profile.onsubmit = (e) => {
     e.preventDefault();
     busy(profile.querySelector("button"), async () => {
       try {
-        await rpc("master_profile_save", { payload: formValues(profile) });
+        await rpc("save_profile", { payload: formValues(profile) });
         await refreshContext();
         await refreshMasterIdentity();
         toast("Profile changes saved");
@@ -180,7 +182,7 @@ registerRoute("master-profile", "Master Profile", async (el) => {
           if (result.error) throw result.error;
           const old = state.profile.avatar_path;
           try {
-            await rpc("master_profile_save", {
+            await rpc("save_profile", {
               payload: { ...formValues(profile), avatar_path: path },
             });
           } catch (error) {
@@ -237,7 +239,7 @@ registerRoute("master-profile", "Master Profile", async (el) => {
   const drawVerification = (u) => {
     const verified = Boolean(u.email_confirmed_at);
     el.querySelector("[data-verified-banner]").textContent = verified
-      ? "✓ Verified platform account"
+      ? "✓ Verified account"
       : "Email verification pending";
     el.querySelector("[data-verification]").innerHTML =
       `<div class="verification-status ${verified ? "verified" : "pending"}"><strong>${verified ? "Email verified" : "Email not verified"}</strong><p class="small">${verified ? "This email is marked verified by Supabase Auth." : "Check your inbox for a confirmation link."}</p></div>`;
@@ -283,4 +285,6 @@ registerRoute("master-profile", "Master Profile", async (el) => {
     },
     { once: true },
   );
-});
+}
+registerRoute("profile", "Profile", renderProfile);
+registerRoute("master-profile", "Master Profile", renderProfile);

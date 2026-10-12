@@ -193,7 +193,7 @@ registerRoute("finance", "Finance", async (el, [tab = "dashboard"]) => {
               tab === "bills"
                 ? `${date(r.next_due)}<div class="small muted">${r.active ? "Active · " + r.frequency.replace("_", " ") : "Closed"}</div>`
                 : date(r.paid_on || r.occurred_on),
-              `<div class="row wrap">${can("finance", "edit") ? `${tab === "bills" && r.active ? `<button class="btn small" data-paid="${i}">Mark paid</button><button class="btn small" data-skip="${i}">Skip</button>` : ""}${!r.bill_id ? `<button class="btn small" data-edit="${i}">Edit</button>` : ""}` : ""}${kind !== "investment" ? `<button class="btn small" data-files="${i}">Attachments</button>` : ""}${can("finance", "delete") ? `<button class="btn small" data-archive="${i}">Archive</button>` : ""}</div>`,
+              `<div class="row wrap">${can("finance", "edit") ? `${tab === "bills" && r.active ? `<button class="btn small" data-paid="${i}">Mark paid</button><button class="btn small" data-skip="${i}">Skip</button>` : ""}${!r.bill_id ? `<button class="btn small" data-edit="${i}">Edit</button>` : ""}` : ""}${kind !== "investment" ? `<button class="btn small" data-files="${i}">Attachments</button>` : ""}${can("finance", "archive") ? `<button class="btn small" data-archive="${i}">Archive</button>` : ""}</div>`,
             ]),
           )
         : empty(
@@ -222,17 +222,15 @@ registerRoute("finance", "Finance", async (el, [tab = "dashboard"]) => {
         (b) =>
           (b.onclick = () => settleBill(rows[Number(b.dataset.skip)], true)),
       );
-    content
-      .querySelectorAll("[data-files]")
-      .forEach(
-        (b) =>
-          (b.onclick = () =>
-            dispatchEvent(
-              new CustomEvent("finance-attachments", {
-                detail: { kind, record: rows[Number(b.dataset.files)] },
-              }),
-            )),
-      );
+    content.querySelectorAll("[data-files]").forEach(
+      (b) =>
+        (b.onclick = () =>
+          dispatchEvent(
+            new CustomEvent("finance-attachments", {
+              detail: { kind, record: rows[Number(b.dataset.files)] },
+            }),
+          )),
+    );
     content.querySelectorAll("[data-archive]").forEach(
       (b) =>
         (b.onclick = async () => {

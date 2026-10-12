@@ -43,3 +43,12 @@ Password updates use Supabase Auth with current-password verification. The refer
 Only the Platform Owner can delegate platform access. Staff permissions are checked by the database and API; tenant financial data and full-access controls remain owner-only. Catalog work profiles supply designations, not authorization roles. Records are archived/deactivated rather than deleted.
 
 Deployment prerequisite: apply `supabase/migrations/20261012_master_control.sql` once in the existing Supabase project. The full `supabase/schema.sql` includes this migration for repeatable installs. Owner applied this migration successfully on 12 October after dashboard automation failed to initialize. Live profile/workspace columns, catalog tables and private avatar storage were independently verified.
+
+
+## Shared profile and permissions update - 12 October 2026
+
+All accounts use the same personal details/password/identity layout and private avatar cropper. The top-right dropdown contains Edit profile, Settings and Sign out, with Permissions for Master/Admin/Manager. Manager and Master workspace permissions are read-only; Admin controls role switches. Platform delegation remains owner-only. Workspace background is slightly grey and transitions respect reduced motion.
+
+Lead country defaults to Pakistan; country and industry are dropdowns with broad choices and Other for industry. Email syntax and international phone format (+ followed by 8-15 digits, first nonzero) are validated in forms and database. Existing invalid contacts are not silently rewritten; unrelated changes remain allowed.
+
+Owner successfully applied `supabase/migrations/20261012_profiles_permissions.sql`; its new column and RPC were independently verified. Archive is separate from Delete. Delete still covers destructive operations such as invoice voiding, not permanent removal of history.

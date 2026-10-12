@@ -45,6 +45,7 @@ function navigation() {
         ["master-templates", "Task Builder", "tasks"],
         ["master-team", "Master Team", "users"],
         ["master-profile", "Master Profile", "users"],
+        ["permissions", "Permissions", "shield"],
         ["master-activity", "Platform Activity", "activity"],
         ["master-finance", "Finance", "money"],
         ["master-settings", "Settings", "settings"],
@@ -52,6 +53,7 @@ function navigation() {
         if ((state.profile.platform_role || "owner") === "owner") return true;
         const permission = {
           "master-workspaces": "view_workspaces",
+          permissions: "view_workspaces",
           "master-roles": "manage_catalog",
           "master-templates": "manage_catalog",
           "master-team": "view_team",
@@ -76,6 +78,9 @@ function navigation() {
           ? [["reports", "Work tracking", "clock"]]
           : []),
         ["team", "Team", "users"],
+        ...(state.roles.includes("manager") && !state.isAdmin
+          ? [["permissions", "Permissions", "shield"]]
+          : []),
         ...(state.isAdmin
           ? [
               ["permissions", "Permissions", "shield"],
@@ -100,25 +105,55 @@ function shell() {
     style.href = "/css/master.css";
     document.head.append(style);
   }
-  app.innerHTML = `<aside class="sidebar"><div class="sidebar-brand">${avatar(name)}<span class="brand-text"><strong>${esc(name)}</strong>${state.isMaster ? '<br><span class="master-badge">CONTROL CENTER</span>' : ""}</span></div><nav>${nav.map(([r, t, i]) => `<a class="nav-item" title="${t}" href="#/${r}">${icon(i)}<span class="nav-text">${t}</span></a>`).join("")}</nav><div class="sidebar-foot row"><span ${state.isMaster ? "data-master-avatar" : ""}>${avatar(state.profile.name)}</span><div class="person-info grow"><strong class="small" ${state.isMaster ? "data-master-name" : ""}>${esc(state.profile.name)}</strong><div class="small muted">${esc(state.isMaster ? "Master" : state.profile.job_title || state.profile.account_type)}</div></div></div></aside><div class="sidebar-shade"></div><div class="app-main"><header class="topbar"><div class="row"><button class="icon-btn" id="toggle-nav" aria-label="Toggle navigation">${icon("menu")}</button><h1 id="page-title"></h1></div><div class="row"><span id="timer-slot"></span><button class="icon-btn" id="notifications" aria-label="Notifications">${icon("bell")}</button><button class="profile-button" id="profile-menu" aria-label="Account menu"><span ${state.isMaster ? "data-master-avatar" : ""}>${avatar(state.profile.name)}</span>${icon("down", 14)}</button></div></header><main class="page" id="page"></main></div>`;
+  app.innerHTML = `<aside class="sidebar"><div class="sidebar-brand">${avatar(name)}<span class="brand-text"><strong>${esc(name)}</strong>${state.isMaster ? '<br><span class="master-badge">CONTROL CENTER</span>' : ""}</span></div><nav>${nav.map(([r, t, i]) => `<a class="nav-item" title="${t}" href="#/${r}">${icon(i)}<span class="nav-text">${t}</span></a>`).join("")}</nav><div class="sidebar-foot row"><span data-master-avatar>${avatar(state.profile.name)}</span><div class="person-info grow"><strong class="small" data-master-name>${esc(state.profile.name)}</strong><div class="small muted">${esc(state.isMaster ? "Master" : state.profile.job_title || state.profile.account_type)}</div></div></div></aside><div class="sidebar-shade"></div><div class="app-main"><header class="topbar"><div class="row"><button class="icon-btn" id="toggle-nav" aria-label="Toggle navigation">${icon("menu")}</button><h1 id="page-title"></h1></div><div class="row"><span id="timer-slot"></span><button class="icon-btn" id="notifications" aria-label="Notifications">${icon("bell")}</button><div class="account-menu"><button class="profile-button" id="profile-menu" aria-label="Account menu" aria-expanded="false" aria-controls="account-dropdown"><span data-master-avatar>${avatar(state.profile.name)}</span>${icon("down", 14)}</button><div id="account-dropdown" class="account-dropdown" hidden></div></div></div></header><main class="page" id="page"></main></div>`;
   document.querySelector("#toggle-nav").onclick = () =>
     document.body.classList.toggle(innerWidth < 768 ? "nav-open" : "collapsed");
   document.querySelector(".sidebar-shade").onclick = () =>
     document.body.classList.remove("nav-open");
-  document.querySelector("#profile-menu").onclick = () => {
-    const modal = dialog(
-      "Your account",
-      `<p><strong>${esc(state.profile.name)}</strong><br><span class="muted">${esc(state.profile.email)}</span></p>${state.isMaster ? '<a class="btn primary" href="#/master-profile" data-my-profile>Master Profile</a>' : ""}<button class="btn" id="sign-out">${icon("logout")}Sign out</button>`,
-    );
-    modal
-      .querySelector("[data-my-profile]")
-      ?.addEventListener("click", () => modal.close());
-    modal.querySelector("#sign-out").onclick = async () => {
-      const sb = await getSupabase();
-      if (!state.isMaster) await (await import("./tracker.js")).stopTracking();
-      await sb.auth.signOut();
-      location.replace("/login.html");
-    };
+  const trigger = document.querySelector("#profile-menu"),
+    menu = document.querySelector("#account-dropdown");
+  const privileged =
+    state.isMaster || state.isAdmin || state.roles.includes("manager");
+  menu.innerHTML = `<div class="account-caption"><strong data-master-name>${esc(state.profile.name)}</strong><small>${esc(state.profile.email)}</small></div><a href="#/${state.isMaster ? "master-profile" : "profile"}">${icon("users")} Edit profile</a><a href="#/${state.isMaster ? "master-settings" : "settings"}">${icon("settings")} Settings</a>${privileged ? `<a href="#/permissions">${icon("shield")} Permissions</a>` : ""}<button type="button" id="sign-out">${icon("logout")} Sign out</button>`;
+  const closeMenu = () => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  trigger.onclick = () => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute("aria-expanded", String(!menu.hidden));
+  };
+  trigger.onkeydown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      menu.querySelector("a").focus();
+    }
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".account-menu")) closeMenu();
+  });
+  menu.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeMenu();
+      trigger.focus();
+    }
+  });
+  menu.addEventListener("focusout", (e) => {
+    if (!e.relatedTarget?.closest(".account-menu")) closeMenu();
+  });
+  menu.querySelectorAll("a").forEach((a) => (a.onclick = closeMenu));
+  window.addEventListener("hashchange", closeMenu);
+  menu.querySelector("#sign-out").onclick = async () => {
+    const sb = await getSupabase();
+    if (!state.isMaster) await (await import("./tracker.js")).stopTracking();
+    const result = await sb.auth.signOut();
+    if (result.error) {
+      (await import("./ui.js")).toast(result.error.message, "error");
+      return;
+    }
+    location.replace("/login.html");
   };
   document.querySelector("#notifications").onclick = () =>
     dialog(
@@ -192,10 +227,9 @@ async function boot() {
     }
     await import("./pages/core.js");
     shell();
-    if (state.isMaster)
-      (await import("./pages/master-profile.js"))
-        .refreshMasterIdentity()
-        .catch(() => {});
+    (await import("./pages/master-profile.js"))
+      .refreshMasterIdentity()
+      .catch(() => {});
     window.addEventListener("hashchange", route);
     await route();
     (await import("./notifications.js")).startNotifications();

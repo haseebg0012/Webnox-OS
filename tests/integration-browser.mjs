@@ -90,7 +90,7 @@ app.get("/js/supabase.js", (_req, res) =>
   res
     .type("text/javascript")
     .send(
-      `const send=(path,body)=>fetch('/fixture/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());const sb={auth:{getSession:async()=>({data:{session:{user:{id:'${admin}'},access_token:'fixture-only'}}}),onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},rpc:(name,args)=>send('rpc',{name,args}),from(name){const query={name,filters:[]};const chain={select(){return chain},eq(k,v){query.filters.push([k,v,'eq']);return chain},is(k,v){query.filters.push([k,v,'is']);return chain},in(k,v){query.filters.push([k,v,'in']);return chain},order(k,{ascending}){query.order=k;query.ascending=ascending;return chain},limit(limit){query.limit=limit;return send('query',query)}};return chain}};export async function getSupabase(){return sb}`,
+      `const send=(path,body)=>fetch('/fixture/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());const sb={auth:{getUser:async()=>({data:{user:{id:'${admin}',email:'admin@fixture.invalid',email_confirmed_at:'2026-10-12T00:00:00Z'}}}),getSession:async()=>({data:{session:{user:{id:'${admin}'},access_token:'fixture-only'}}}),onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},rpc:(name,args)=>send('rpc',{name,args}),from(name){const query={name,filters:[]};const chain={select(){return chain},eq(k,v){query.filters.push([k,v,'eq']);return chain},is(k,v){query.filters.push([k,v,'is']);return chain},in(k,v){query.filters.push([k,v,'in']);return chain},order(k,{ascending}){query.order=k;query.ascending=ascending;return chain},limit(limit){query.limit=limit;return send('query',query)}};return chain}};export async function getSupabase(){return sb}`,
     ),
 );
 app.use(express.static(fileURLToPath(new URL("../public", import.meta.url))));
@@ -118,10 +118,79 @@ const click = async (name) => {
 };
 const closeDialog = () => page.locator("dialog").waitFor({ state: "detached" });
 try {
+  await go("profile");
+  await fill("First name *", "Updated");
+  await fill("Last name", "Admin");
+  await fill("Display name *", "Updated Admin");
+  await click("Save profile changes");
+  await page.getByText("Profile changes saved", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByLabel("First name *", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByLabel("First name *", { exact: true }).inputValue(),
+    "Updated",
+  );
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  const trigger = await page.locator("#profile-menu").boundingBox(),
+    dropdown = await page.locator("#account-dropdown").boundingBox();
+  assert.ok(
+    dropdown.y >= trigger.y + trigger.height &&
+      dropdown.x + dropdown.width <= 1440,
+  );
+  for (const name of ["Edit profile", "Settings", "Permissions"])
+    await page
+      .locator("#account-dropdown")
+      .getByRole("link", { name, exact: true })
+      .waitFor();
+  await page
+    .locator("#account-dropdown")
+    .getByRole("link", { name: "Permissions", exact: true })
+    .focus();
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#account-dropdown").isVisible(), false);
+  await go("permissions");
+  const toggle = page.getByRole("switch", {
+    name: "Sales Representative leads archive",
+    exact: true,
+  });
+  await toggle.click();
+  const checked = await toggle.getAttribute("aria-checked");
+  await click("Save permissions");
+  await page.getByText("Permissions saved", { exact: true }).waitFor();
+  await page.reload();
+  await toggle.waitFor();
+  assert.equal(await toggle.getAttribute("aria-checked"), checked);
+  await page.screenshot({ path: "tmp/permissions-matrix.png", fullPage: true });
   await go("leads");
   await click("Add lead");
   await fill("Name", "Browser Contact");
   await fill("Company *", "Browser Company");
+  assert.equal(
+    await page.getByLabel("Country", { exact: true }).inputValue(),
+    "Pakistan",
+  );
+  await page
+    .getByLabel("Industry / niche", { exact: true })
+    .selectOption("Ecommerce");
+  await fill("Email", "invalid@host.x");
+  await fill("Phone", "122131");
+  await click("Add lead");
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  assert.equal((await run("select count(*)::int n from leads"))[0].n, 0);
+  assert.equal(
+    await page
+      .getByLabel("Email", { exact: true })
+      .evaluate((e) => e.validity.valid),
+    false,
+  );
+  await fill("Email", "contact@example.com");
+  assert.equal(
+    await page
+      .getByLabel("Phone", { exact: true })
+      .evaluate((e) => e.validity.valid),
+    false,
+  );
+  await fill("Phone", "+923001234567");
   await page.getByLabel("Stage", { exact: true }).selectOption("won");
   await click("Add lead");
   await closeDialog();

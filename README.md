@@ -70,7 +70,7 @@ npm test
 npm run check
 ```
 
-28 database/API checks pass hain: public-config whitelist, private paths, API guards, public forms, salary isolation, invoice counters/totals, recurring bills, rent lifecycle aur cross-workspace access. PGlite schema twice run karta hai. Browser suites mein 20 public aur 200 authenticated page/tab checks 390, 768, 1024 aur 1440 par pass hain. `tests/integration-browser.mjs` actual local UI se PGlite tak poora lead → project → task/review aur invoice → payment workflow verify karta hai. Browser tests ko Playwright aur Chrome chahiye; module path `PLAYWRIGHT_MODULE` se set ho sakta hai. Fixtures sirf tests mein hain.
+30 database/API checks pass hain: public-config whitelist, private paths, API guards, public forms, salary isolation, invoice counters/totals, recurring bills, rent lifecycle aur cross-workspace access. PGlite schema twice run karta hai. Browser suites mein 20 public aur 220 authenticated page/tab checks 390, 768, 1024 aur 1440 par pass hain. `tests/integration-browser.mjs` actual local UI se PGlite tak poora lead → project → task/review aur invoice → payment workflow verify karta hai. Browser tests ko Playwright aur Chrome chahiye; module path `PLAYWRIGHT_MODULE` se set ho sakta hai. Fixtures sirf tests mein hain.
 
 ## Git handover
 
@@ -87,3 +87,11 @@ Commit/push pehle ho chuka ho to same command dobara karne ki zaroorat nahi. `.e
 ## Specifications
 
 `docs/00-README.md` se reading start karo. `docs/08-Owner-Decisions.md` latest corrections aur unresolved conflicts record karta hai. Original supplied files `Files/` mein unchanged hain; normalized docs ke andar product aur first-business names user ke corrections ke mutabiq hain.
+
+## Master control center upgrade
+
+The 12 October update adds Master Profile (private avatar crop, contact details, password changes and verified Auth status), complete business details, Business Roles, Task Builder, Master Team and Platform Activity in the reference's compact indigo layout. Tasks and team forms can reuse the platform catalog. Passwords are never stored as a local fallback.
+
+The owner applied `supabase/migrations/20261012_master_control.sql` successfully on 12 October; its live schema and private avatar bucket were verified. No need to run it again for this release. It upgrades the deployed schema without replacing business data and is safe to repeat. `supabase/schema.sql` includes it for fresh installs. Platform invitations produce private setup links to share with the intended recipient; only the owner can grant platform access.
+
+`tests/master-browser.mjs` verifies real UI → PGlite profile persistence, workspace details, catalog forms and a 512×512 WebP crop. Supabase Auth and storage transport are test fixtures in this local suite; no real password is changed. Existing business workflows remain covered by `tests/integration-browser.mjs`.

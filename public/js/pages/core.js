@@ -85,3 +85,6 @@ await import("./finance.js");
 await import("./invoices.js");
 await import("../finance-files.js");
 await import("./billing.js");
+
+await import("./master-profile.js");
+await import("./master-control.js");

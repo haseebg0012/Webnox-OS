@@ -33,3 +33,13 @@ Implementation decisions: first payment is due at trial end (PRD); only Admin cr
 - The ban on links to the platform login means user-facing navigation links. Its required rewrite, robots exclusion, HTTP handler and security tests must reference that path.
 - Auth, workspace and M7–M20 business modules are now implemented. Full schema migration succeeded on 11 October 2026; production release a7733bc is Ready and verified. Owner password setup and real Master dashboard/finance are verified. Email OTP expiry is 86400 seconds, explicitly approved by owner. Current local verification: 28 database/API checks, 20 public responsive checks, 200 authenticated responsive page/tab checks and a real database-backed browser workflow.
 - Invoice A4 follows written requirements; exact visual reference remains absent. Business bank/address/logo details are left for the real values, never invented.
+
+## Master control center update — 12 October 2026
+
+Owner supplied screenshots and a React reference. The implementation stays plain HTML/CSS/ES modules: indigo Master navigation, profile and private avatar crop upload, complete business details, business-role catalog, reusable task templates, platform team permissions and activity. Existing finance remains available.
+
+Password updates use Supabase Auth with current-password verification. The reference's plaintext localStorage password fallback is intentionally not used; connection failures report an error and allow retry. JWT is described as signed authentication, not encryption. Email status is read from Auth; confirmed accounts do not resend unnecessary verification mail.
+
+Only the Platform Owner can delegate platform access. Staff permissions are checked by the database and API; tenant financial data and full-access controls remain owner-only. Catalog work profiles supply designations, not authorization roles. Records are archived/deactivated rather than deleted.
+
+Deployment prerequisite: apply `supabase/migrations/20261012_master_control.sql` once in the existing Supabase project. The full `supabase/schema.sql` includes this migration for repeatable installs. Owner applied this migration successfully on 12 October after dashboard automation failed to initialize. Live profile/workspace columns, catalog tables and private avatar storage were independently verified.

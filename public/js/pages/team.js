@@ -24,11 +24,43 @@ async function editMember(member, refresh) {
     order: "role_key",
   });
   const roles = ["manager", ...available.map((r) => r.role_key)];
+  const catalog = await q("business_role_catalog", {
+    filters: { active: true },
+    order: "name",
+    ascending: true,
+  });
   const d = dialog(
     member ? "Edit team member" : "Add team member",
     `<form class="stack"><div class="form-grid">${field("name", "Full name", member?.name, { required: true })}${member ? "" : field("email", "Email address", "", { required: true, type: "email" })}${field("job_title", "Designation", member?.job_title || "", { required: true, help: "For example, Developer or Account manager." })}${field("department", "Department", member?.department || "", { options: ["", ...new Set([...DEPARTMENTS, member?.department].filter(Boolean))] })}${field("phone", "Phone", member?.phone || "")}</div><div><h3>Roles</h3><div class="form-grid">${roles.map((r) => `<label class="check"><input type="checkbox" name="role" value="${r}" ${member?.roles?.includes(r) ? "checked" : ""}>${ROLE_KEYS[r]}</label>`).join("")}</div></div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${member ? "Save changes" : "Create member"}</button></div></form>`,
   );
   const form = d.querySelector("form");
+  if (catalog.length) {
+    form.insertAdjacentHTML(
+      "afterbegin",
+      field("work_profile", "Business work profile", "", {
+        options: [
+          ["", "Custom designation"],
+          ...catalog.map((r) => [r.id, `${r.name} · ${r.department}`]),
+        ],
+      }),
+    );
+    form.elements.work_profile.onchange = () => {
+      const role = catalog.find(
+        (r) => r.id === form.elements.work_profile.value,
+      );
+      if (!role) return;
+      form.elements.job_title.value = role.name;
+      if (
+        ![...form.elements.department.options].some(
+          (o) => o.value === role.department,
+        )
+      )
+        form.elements.department.add(
+          new Option(role.department, role.department),
+        );
+      form.elements.department.value = role.department;
+    };
+  }
   form.onsubmit = (e) => {
     e.preventDefault();
     busy(form.querySelector("[type=submit]"), async () => {

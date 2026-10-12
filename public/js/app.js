@@ -39,11 +39,31 @@ export async function refreshContext() {
 function navigation() {
   return state.isMaster
     ? [
-        ["master-home", "Home", "home"],
+        ["master-home", "Dashboard", "grid"],
         ["master-workspaces", "Workspaces", "grid"],
+        ["master-roles", "Business Roles", "briefcase"],
+        ["master-templates", "Task Builder", "tasks"],
+        ["master-team", "Master Team", "users"],
+        ["master-profile", "Master Profile", "users"],
+        ["master-activity", "Platform Activity", "activity"],
         ["master-finance", "Finance", "money"],
         ["master-settings", "Settings", "settings"],
-      ]
+      ].filter(([route]) => {
+        if ((state.profile.platform_role || "owner") === "owner") return true;
+        const permission = {
+          "master-workspaces": "view_workspaces",
+          "master-roles": "manage_catalog",
+          "master-templates": "manage_catalog",
+          "master-team": "view_team",
+          "master-activity": "view_audit",
+          "master-settings": "edit_settings",
+          "master-finance": "owner",
+        }[route];
+        return (
+          !permission ||
+          state.profile.platform_permissions?.includes(permission)
+        );
+      })
     : [
         ["home", "Overview", "home"],
         ["tasks", "Tasks", "tasks"],
@@ -80,7 +100,7 @@ function shell() {
     style.href = "/css/master.css";
     document.head.append(style);
   }
-  app.innerHTML = `<aside class="sidebar"><div class="sidebar-brand">${avatar(name)}<span class="brand-text"><strong>${esc(name)}</strong>${state.isMaster ? '<br><span class="master-badge">Master</span>' : ""}</span></div><nav>${nav.map(([r, t, i]) => `<a class="nav-item" title="${t}" href="#/${r}">${icon(i)}<span class="nav-text">${t}</span></a>`).join("")}</nav><div class="sidebar-foot row">${avatar(state.profile.name)}<div class="person-info grow"><strong class="small">${esc(state.profile.name)}</strong><div class="small muted">${esc(state.isMaster ? "Master" : state.profile.job_title || state.profile.account_type)}</div></div></div></aside><div class="sidebar-shade"></div><div class="app-main"><header class="topbar"><div class="row"><button class="icon-btn" id="toggle-nav" aria-label="Toggle navigation">${icon("menu")}</button><h1 id="page-title"></h1></div><div class="row"><span id="timer-slot"></span><button class="icon-btn" id="notifications" aria-label="Notifications">${icon("bell")}</button><button class="profile-button" id="profile-menu" aria-label="Account menu">${avatar(state.profile.name)}${icon("down", 14)}</button></div></header><main class="page" id="page"></main></div>`;
+  app.innerHTML = `<aside class="sidebar"><div class="sidebar-brand">${avatar(name)}<span class="brand-text"><strong>${esc(name)}</strong>${state.isMaster ? '<br><span class="master-badge">CONTROL CENTER</span>' : ""}</span></div><nav>${nav.map(([r, t, i]) => `<a class="nav-item" title="${t}" href="#/${r}">${icon(i)}<span class="nav-text">${t}</span></a>`).join("")}</nav><div class="sidebar-foot row"><span ${state.isMaster ? "data-master-avatar" : ""}>${avatar(state.profile.name)}</span><div class="person-info grow"><strong class="small" ${state.isMaster ? "data-master-name" : ""}>${esc(state.profile.name)}</strong><div class="small muted">${esc(state.isMaster ? "Master" : state.profile.job_title || state.profile.account_type)}</div></div></div></aside><div class="sidebar-shade"></div><div class="app-main"><header class="topbar"><div class="row"><button class="icon-btn" id="toggle-nav" aria-label="Toggle navigation">${icon("menu")}</button><h1 id="page-title"></h1></div><div class="row"><span id="timer-slot"></span><button class="icon-btn" id="notifications" aria-label="Notifications">${icon("bell")}</button><button class="profile-button" id="profile-menu" aria-label="Account menu"><span ${state.isMaster ? "data-master-avatar" : ""}>${avatar(state.profile.name)}</span>${icon("down", 14)}</button></div></header><main class="page" id="page"></main></div>`;
   document.querySelector("#toggle-nav").onclick = () =>
     document.body.classList.toggle(innerWidth < 768 ? "nav-open" : "collapsed");
   document.querySelector(".sidebar-shade").onclick = () =>
@@ -88,8 +108,11 @@ function shell() {
   document.querySelector("#profile-menu").onclick = () => {
     const modal = dialog(
       "Your account",
-      `<p><strong>${esc(state.profile.name)}</strong><br><span class="muted">${esc(state.profile.email)}</span></p><button class="btn" id="sign-out">${icon("logout")}Sign out</button>`,
+      `<p><strong>${esc(state.profile.name)}</strong><br><span class="muted">${esc(state.profile.email)}</span></p>${state.isMaster ? '<a class="btn primary" href="#/master-profile" data-my-profile>Master Profile</a>' : ""}<button class="btn" id="sign-out">${icon("logout")}Sign out</button>`,
     );
+    modal
+      .querySelector("[data-my-profile]")
+      ?.addEventListener("click", () => modal.close());
     modal.querySelector("#sign-out").onclick = async () => {
       const sb = await getSupabase();
       if (!state.isMaster) await (await import("./tracker.js")).stopTracking();
@@ -136,6 +159,17 @@ async function route() {
 async function boot() {
   try {
     const sb = await getSupabase();
+    const callback = new URLSearchParams(location.hash.slice(1));
+    if (callback.has("access_token") || callback.has("error_description")) {
+      history.replaceState(null, "", "/");
+      if (callback.has("error_description"))
+        throw new Error(callback.get("error_description"));
+      const verified = await sb.auth.setSession({
+        access_token: callback.get("access_token"),
+        refresh_token: callback.get("refresh_token"),
+      });
+      if (verified.error) throw verified.error;
+    }
     const {
       data: { session },
     } = await sb.auth.getSession();
@@ -158,6 +192,10 @@ async function boot() {
     }
     await import("./pages/core.js");
     shell();
+    if (state.isMaster)
+      (await import("./pages/master-profile.js"))
+        .refreshMasterIdentity()
+        .catch(() => {});
     window.addEventListener("hashchange", route);
     await route();
     (await import("./notifications.js")).startNotifications();

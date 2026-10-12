@@ -146,6 +146,14 @@ function clientSource(world) {
   };
   const responses = {
     boot_context: context,
+    master_team_list: [
+      {
+        ...profile,
+        platform_role: "owner",
+        platform_permissions: [],
+        created_at: "2026-10-12T00:00:00Z",
+      },
+    ],
     team_directory: members,
     dashboard: {
       today: "2026-10-11",
@@ -188,7 +196,7 @@ function clientSource(world) {
     ",responses=" +
     JSON.stringify(responses) +
     ";" +
-    "const sb={auth:{async getSession(){return {data:{session:{user:{id:context.profile.id},access_token:'local-test-token'}}}},onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},async rpc(name){return {data:responses[name]??null}},from(name){let rows=tables[name]||[];const chain={select(){return chain},eq(k,v){rows=rows.filter(r=>r[k]===v);return chain},in(k,v){rows=rows.filter(r=>v.includes(r[k]));return chain},is(k,v){rows=rows.filter(r=>r[k]==v);return chain},order(){return chain},limit(){return Promise.resolve({data:rows})}};return chain}};export async function getSupabase(){return sb}"
+    "const sb={auth:{async getUser(){return {data:{user:{...context.profile,email_confirmed_at:'2026-10-12T00:00:00Z',last_sign_in_at:'2026-10-12T00:00:00Z'}}}},async getSession(){return {data:{session:{user:{id:context.profile.id},access_token:'local-test-token'}}}},onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},async rpc(name){return {data:responses[name]??null}},from(name){let rows=tables[name]||[];const chain={select(){return chain},eq(k,v){rows=rows.filter(r=>r[k]===v);return chain},in(k,v){rows=rows.filter(r=>v.includes(r[k]));return chain},is(k,v){rows=rows.filter(r=>r[k]==v);return chain},order(){return chain},limit(){return Promise.resolve({data:rows})}};return chain}};export async function getSupabase(){return sb}"
   );
 }
 (async () => {
@@ -231,6 +239,11 @@ function clientSource(world) {
                 "master-finance/payments",
                 "master-finance/invoices",
                 "master-settings",
+                "master-profile",
+                "master-team",
+                "master-roles",
+                "master-templates",
+                "master-activity",
                 "create-workspace",
                 "workspace/" + workspace.id,
               ]

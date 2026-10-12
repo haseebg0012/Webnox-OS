@@ -100,6 +100,59 @@ test("Master API refuses valid business sessions before performing privileged op
   );
 });
 
+test("delegated platform sessions cannot provision without permission or invite platform staff", async () => {
+  let created = 0;
+  const factory = (_url, key) =>
+    key === configured.SUPABASE_SECRET_KEY
+      ? {
+          auth: {
+            getUser: async () => ({
+              data: { user: { id: "support-fixture" } },
+            }),
+            admin: {
+              createUser: async () => {
+                created++;
+                throw new Error("Unexpected provisioning");
+              },
+            },
+          },
+        }
+      : {
+          rpc: async (name) =>
+            name === "boot_context"
+              ? {
+                  data: {
+                    profile: {
+                      id: "support-fixture",
+                      is_master: true,
+                      platform_role: "support",
+                      status: "active",
+                      account_type: "master",
+                    },
+                  },
+                }
+              : { data: false },
+        };
+  await withServer(
+    configured,
+    async (base) => {
+      for (const route of ["/api/master/workspaces", "/api/master/team"]) {
+        const result = await fetch(base + route, {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer valid",
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        });
+        assert.equal(result.status, 403);
+      }
+      assert.equal(created, 0);
+    },
+    factory,
+  );
+});
+
 test("public branding is limited to name, logo and slug; negative lookups are indistinguishable", async () => {
   const factory = () => ({
     rpc: async () => ({ data: true }),

@@ -39,11 +39,43 @@ export async function taskForm(task, members, projectId = null) {
           m.status === "active" &&
           (m.id === state.user.id || approved.some((p) => p.user_id === m.id)),
       );
+  const templates = task
+    ? []
+    : await q("task_templates", {
+        filters: { active: true },
+        order: "name",
+        ascending: true,
+      });
   const d = dialog(
     task ? "Edit task" : "Create task",
     `<form class="stack">${field("title", "Task title", task?.title || "", { required: true })}${field("description", "Description", task?.description || "", { type: "textarea" })}<div class="form-grid">${field("assignee_id", "Assign to", task?.assignee_id || state.user.id, { options: editable.map((m) => [m.id, `${m.name}${m.job_title ? " · " + m.job_title : ""}`]), required: true })}${field("priority", "Priority", task?.priority || "medium", { options: ["low", "medium", "high", "urgent"] })}${field("due_date", "Due date", task?.due_date || "", { type: "date" })}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="btn primary" type="submit">${task ? "Save changes" : "Create task"}</button></div></form>`,
   );
   const form = d.querySelector("form");
+  if (templates.length) {
+    form.insertAdjacentHTML(
+      "afterbegin",
+      field("template", "Start from a template", "", {
+        options: [
+          ["", "Blank task"],
+          ...templates.map((t) => [t.id, `${t.name} · ${t.department}`]),
+        ],
+      }),
+    );
+    form.elements.template.onchange = () => {
+      const selected = templates.find(
+        (t) => t.id === form.elements.template.value,
+      );
+      if (!selected) return;
+      form.elements.title.value = selected.name;
+      form.elements.description.value = [
+        selected.description,
+        selected.instructions,
+        `Required module: ${selected.required_module}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    };
+  }
   form.onsubmit = (e) => {
     e.preventDefault();
     busy(form.querySelector("[type=submit]"), async () => {

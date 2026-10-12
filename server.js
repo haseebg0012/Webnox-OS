@@ -438,6 +438,12 @@ export function createApp(env = process.env, clientFactory = createClient) {
     let db;
     const created = [];
     try {
+      if (
+        !(await rpc(req.db, "platform_can", {
+          permission: "create_workspaces",
+        }))
+      )
+        throw fail("Access is not permitted.", 403);
       siteUrl();
       const p = req.body || {};
       p.name = textField(p.name, "business name");
@@ -509,6 +515,30 @@ export function createApp(env = process.env, clientFactory = createClient) {
       next(error);
     }
   });
+  app.post("/api/master/team", async (req, res, next) => {
+    let db;
+    const created = [];
+    try {
+      if (!(await rpc(req.db, "is_master", {})))
+        throw fail("Only the platform owner can invite platform members.", 403);
+      siteUrl();
+      const p = req.body || {};
+      p.name = textField(p.name, "full name");
+      p.email = email(p.email);
+      db = service();
+      const identity = await createIdentity(db, p, created);
+      const url = await invitation(db, identity);
+      await rpc(req.db, "master_team_save", {
+        target: identity.id,
+        payload: p,
+      });
+      res.status(201).json({ url });
+    } catch (error) {
+      if (db) await cleanupUnprovisioned(db, created).catch(() => {});
+      next(error);
+    }
+  });
+
   app.use("/api/members", requireAuth, adminOnly);
   app.post("/api/members", async (req, res, next) => {
     let db;

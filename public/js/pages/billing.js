@@ -1,3 +1,4 @@
+import { businessFields, platformCan } from "./master-control.js";
 import { registerRoute, refreshContext } from "../app.js";
 import { state, money } from "../state.js";
 import { rpc, q, api } from "../data.js";
@@ -249,6 +250,8 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
     .join(
       "",
     )}</div>${w.subscription?.member_limit && stats.members > w.subscription.member_limit ? '<div class="banner">Member count exceeds the plan’s warning limit. Access remains available.</div>' : ""}<div class="tabs">${["members", "activity", "roles", "settings", ...(w.subscription ? ["billing"] : []), ...(w.full_access ? ["records"] : [])].map((t) => `<button data-tab="${t}" class="${t === "members" ? "active" : ""}">${label(t)}</button>`).join("")}</div><div data-content></div>`;
+  const owner = (state.profile.platform_role || "owner") === "owner";
+  if (!owner) el.querySelector("[data-access]").hidden = true;
   const content = el.querySelector("[data-content]");
   const draw = async (tab) => {
     try {
@@ -279,6 +282,10 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
           order: null,
         });
         content.innerHTML = `<form class="card stack"><h2>Activated roles</h2><p class="muted">Admin and Manager are always available. Switching off a role immediately removes its database access.</p>${roles.map((r) => `<label class="check"><input type="checkbox" name="role" value="${r.role_key}" ${r.active ? "checked" : ""}>${esc(ROLE_KEYS[r.role_key])}</label>`).join("")}<p class="form-error"></p><button class="btn primary">Save roles</button></form>`;
+        if (!platformCan("edit_workspaces"))
+          content
+            .querySelectorAll("input,button")
+            .forEach((c) => (c.disabled = true));
         content.querySelector("form").onsubmit = (e) => {
           e.preventDefault();
           busy(content.querySelector(".btn"), async () => {
@@ -311,11 +318,24 @@ registerRoute("workspace", "Workspace", async (el, [id]) => {
         content.querySelector("[data-pay]").onclick = () => recordPayment(w);
         content.querySelector("[data-plan]").onclick = () => planForm(w);
       } else if (tab === "settings") {
-        content.innerHTML = `<section class="card"><dl class="kv"><dt>Business</dt><dd>${esc(w.name)}</dd><dt>Country</dt><dd>${esc(w.country || "—")}</dd><dt>Short code</dt><dd>${esc(w.short_code)}</dd><dt>Created</dt><dd>${date(w.created_at)}</dd></dl><div class="row wrap"><button class="btn" data-edit-workspace>Edit business details</button><button class="btn" data-message>Notify Admin</button>${w.status === "active" || w.status === "trial" ? '<button class="btn" data-status="suspended">Suspend</button>' : '<button class="btn" data-status="active">Resume</button>'}${w.status !== "archived" ? '<button class="btn" data-status="archived">Archive</button>' : ""}</div></section>`;
+        content.innerHTML = `<section class="card"><dl class="kv"><dt>Business</dt><dd>${esc(w.name)}</dd><dt>Country</dt><dd>${esc(w.country || "—")}</dd><dt>Short code</dt><dd>${esc(w.short_code)}</dd><dt>Created</dt><dd>${date(w.created_at)}</dd>${Object.entries(
+          w.business_details || {},
+        )
+          .filter(([, v]) => v)
+          .map(([k, v]) => `<dt>${esc(label(k))}</dt><dd>${esc(v)}</dd>`)
+          .join(
+            "",
+          )}</dl><div class="row wrap"><button class="btn" data-edit-workspace>Edit business details</button><button class="btn" data-message>Notify Admin</button>${w.status === "active" || w.status === "trial" ? '<button class="btn" data-status="suspended">Suspend</button>' : '<button class="btn" data-status="active">Resume</button>'}${w.status !== "archived" ? '<button class="btn" data-status="archived">Archive</button>' : ""}</div></section>`;
+        content.querySelector("[data-edit-workspace]").hidden =
+          !platformCan("edit_workspaces");
+        content.querySelector("[data-message]").hidden = !owner;
+        content
+          .querySelectorAll("[data-status]")
+          .forEach((b) => (b.hidden = !platformCan("suspend_workspaces")));
         content.querySelector("[data-edit-workspace]").onclick = () => {
           const d = dialog(
             "Business details",
-            `<form class="stack">${field("name", "Business name", w.name, { required: true })}${field("country", "Country", w.country || "")}<p class="form-error" role="alert"></p><button class="btn primary" type="submit">Save business details</button></form>`,
+            `<form class="stack">${field("name", "Business name", w.name, { required: true })}${field("country", "Country", w.country || "")}<div class="form-grid">${businessFields(w)}${field("timezone", "Timezone", w.settings?.timezone || "Asia/Karachi")}${field("app_currency", "Workspace currency", w.settings?.app_currency || "PKR", { options: CURRENCIES })}</div><p class="form-error" role="alert"></p><button class="btn primary" type="submit">Save business details</button></form>`,
           );
           const form = d.querySelector("form");
           form.onsubmit = (e) => {

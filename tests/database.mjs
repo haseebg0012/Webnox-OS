@@ -131,7 +131,7 @@ test("database contract", async (t) => {
         ).rows;
         assert.ok(
           policies.every((p) =>
-            /current_workspace|is_master|master_can_read|own_profile|billing_workspace/.test(
+            /current_workspace|is_master|master_can_read|own_profile|billing_workspace|platform_can/.test(
               `${p.qual} ${p.with_check}`,
             ),
           ),
@@ -1711,6 +1711,181 @@ test("database contract", async (t) => {
           /permitted/,
         );
         await as(master, "select master_set_full_access($1,false)", [A]);
+      },
+    );
+    await t.test(
+      "Master control: profile, avatar, catalogs and delegated access stay isolated",
+      async () => {
+        await as(master, "select master_profile_save($1)", [
+          {
+            name: "Master Updated",
+            first_name: "Master",
+            last_name: "Updated",
+            phone: "+123",
+            date_of_birth: "1990-01-01",
+            email: "forged@fixture.invalid",
+            is_master: false,
+          },
+        ]);
+        const profile = (await as(master, "select boot_context() data"))[0].data
+          .profile;
+        assert.equal(profile.name, "Master Updated");
+        assert.equal(profile.email, "master@fixture.invalid");
+        assert.equal(profile.is_master, true);
+        await assert.rejects(
+          as(adminA, "select master_profile_save($1)", [{ name: "Wrong" }]),
+          /permitted/,
+        );
+        await assert.rejects(
+          as(master, "select master_profile_save($1)", [
+            { name: "Master", date_of_birth: "2999-01-01" },
+          ]),
+          /birth/,
+        );
+        await assert.rejects(
+          as(master, "select master_profile_save($1)", [
+            { name: "Master", avatar_path: adminA + "/photo.webp" },
+          ]),
+          /Upload/,
+        );
+        const path = master + "/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.webp";
+        await as(
+          master,
+          "insert into storage.objects(bucket_id,name) values('avatars',$1)",
+          [path],
+        );
+        await as(master, "select master_profile_save($1)", [
+          { name: "Master Updated", avatar_path: path },
+        ]);
+        assert.equal(
+          (
+            await as(
+              adminA,
+              "select * from storage.objects where bucket_id='avatars'",
+            )
+          ).length,
+          0,
+        );
+        const role = (
+          await as(master, "select master_catalog_save($1,$2) id", [
+            "role",
+            {
+              name: "Developer",
+              department: "Development",
+              responsibilities: "Build\nReview",
+            },
+          ])
+        )[0].id;
+        const template = (
+          await as(master, "select master_catalog_save($1,$2) id", [
+            "template",
+            {
+              name: "Build page",
+              role_id: role,
+              department: "Wrong",
+              required_module: "projects",
+              instructions: "Implement and review",
+            },
+          ])
+        )[0].id;
+        assert.equal(
+          (
+            await as(adminA, "select * from task_templates where id=$1", [
+              template,
+            ])
+          )[0].department,
+          "Development",
+        );
+        await assert.rejects(
+          as(adminA, "select master_catalog_save($1,$2)", [
+            "role",
+            { name: "Forged" },
+          ]),
+          /permitted/,
+        );
+        const staff = "20000000-0000-0000-0000-000000000090";
+        await owner(
+          `insert into auth.users(id,email) values('${staff}','support@fixture.invalid')`,
+        );
+        await as(master, "select master_team_save($1,$2)", [
+          staff,
+          {
+            name: "Support Fixture",
+            platform_role: "support",
+            permissions: ["view_workspaces", "view_team"],
+          },
+        ]);
+        assert.equal(
+          (await as(staff, "select is_master() value"))[0].value,
+          false,
+        );
+        assert.equal(
+          (await as(staff, "select master_workspace_list() data"))[0].data
+            .length > 0,
+          true,
+        );
+        await as(staff, "select master_open_workspace($1)", [A]);
+        await assert.rejects(
+          as(staff, "select master_set_full_access($1,true)", [A]),
+          /permitted/,
+        );
+        await assert.rejects(
+          as(staff, "select master_team_save($1,$2)", [
+            staff,
+            { name: "Escalate", platform_role: "admin", permissions: [] },
+          ]),
+          /owner/,
+        );
+        await assert.rejects(
+          as(staff, "select master_save_workspace($1,$2)", [
+            A,
+            { name: "Forged" },
+          ]),
+          /permitted/,
+        );
+        assert.equal((await as(staff, "select * from expenses")).length, 0);
+        await as(master, "select master_team_save($1,$2)", [
+          staff,
+          {
+            name: "Support Fixture",
+            platform_role: "support",
+            permissions: ["view_workspaces", "edit_workspaces"],
+          },
+        ]);
+        await as(staff, "select master_save_workspace($1,$2)", [
+          A,
+          {
+            name: "Workspace A",
+            legal_name: "Fixture Ltd",
+            business_email: "contact@fixture.invalid",
+            website: "https://fixture.invalid",
+            city: "Test city",
+          },
+        ]);
+        assert.equal(
+          (await as(staff, "select master_workspace_list() data"))[0].data.find(
+            (w) => w.id === A,
+          ).business_details.city,
+          "Test city",
+        );
+        await as(master, "select master_team_save($1,$2)", [
+          staff,
+          {
+            name: "Support Fixture",
+            platform_role: "support",
+            status: "inactive",
+            permissions: ["view_workspaces"],
+          },
+        ]);
+        await assert.rejects(
+          as(staff, "select master_workspace_list()"),
+          /permitted/,
+        );
+        await db.exec(schema);
+        await assert.rejects(
+          as(staff, "select master_workspace_list()"),
+          /permitted/,
+        );
       },
     );
   } finally {

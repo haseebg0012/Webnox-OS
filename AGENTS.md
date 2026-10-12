@@ -35,7 +35,7 @@
 
 ## Current phase status
 
-Foundation/account flows are live on webnoxos.vercel.app; the business-module release is being deployed. The complete schema through platform billing was installed successfully on 11 October 2026, with RLS. Vercel plugin returns 403 for the correct team; authorized dashboard access and GitHub deployment work. SITE_URL is configured for Production and Preview. Supabase public signup is disabled; production Site URL and set-password redirect are configured. OTP expiry remains to be verified.
+The business-module release a7733bc is live on webnoxos.vercel.app (Vercel Ready). Live source/config/branding/private-path checks and 20 production public-page checks passed. The owner completed password setup and the real Master dashboard/finance loaded successfully. The complete schema through platform billing was installed successfully on 11 October 2026, with RLS. Vercel plugin returns 403 for the correct team; authorized dashboard access and GitHub deployment work. SITE_URL is configured for Production and Preview. Supabase public signup is disabled; production Site URL and set-password redirect are configured. Email OTP expiry is verified at 86400 seconds after explicit owner approval.
 
 Current checks: 28 database/API checks, 20 public route checks, 200 authenticated responsive page/tab checks at 390/768/1024/1440. `tests/integration-browser.mjs` runs real UI → local HTTP → PGlite RPC/RLS → UI flows for lead conversion, projects, task timers/review, invoices, expenses and bills. Browser fixtures exist only in tests, never in production. Temporary reports/screenshots/print PDFs are ignored in tmp/.
 

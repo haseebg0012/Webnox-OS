@@ -327,6 +327,7 @@ test("private source, keys and attachment paths cannot be downloaded", async () 
 test("Master entry resolves without exposing a link on the public page", async () => {
   await withServer(configured, async (base) => {
     const home = await fetch(base);
+    assert.equal(home.headers.get("cache-control"), "no-store");
     assert.equal(home.status, 200);
     const html = await home.text();
     assert.ok(html.includes("Webnox OS"));

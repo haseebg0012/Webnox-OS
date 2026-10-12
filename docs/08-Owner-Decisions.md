@@ -31,5 +31,5 @@ Implementation decisions: first payment is due at trial end (PRD); only Admin cr
 ## Practical interpretation
 
 - The ban on links to the platform login means user-facing navigation links. Its required rewrite, robots exclusion, HTTP handler and security tests must reference that path.
-- Auth, workspace and M7–M20 business modules are now implemented. Full schema migration succeeded on 11 October 2026; production frontend deployment is being verified. Current local verification: 28 database/API checks, 20 public responsive checks, 200 authenticated responsive page/tab checks and a real database-backed browser workflow.
+- Auth, workspace and M7–M20 business modules are now implemented. Full schema migration succeeded on 11 October 2026; production release a7733bc is Ready and verified. Owner password setup and real Master dashboard/finance are verified. Email OTP expiry is 86400 seconds, explicitly approved by owner. Current local verification: 28 database/API checks, 20 public responsive checks, 200 authenticated responsive page/tab checks and a real database-backed browser workflow.
 - Invoice A4 follows written requirements; exact visual reference remains absent. Business bank/address/logo details are left for the real values, never invented.

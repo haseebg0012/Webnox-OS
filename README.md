@@ -4,7 +4,7 @@ Har business ka apna workspace. Platform owner: **Haseeb Gul**. Pehla business *
 
 ## Abhi kya ready hai
 
-Workspace creation, branded sign-in, Team aur permissions ke saath tasks/review, timers, work reports, CRM leads, clients, projects, private files, notifications, finance, invoices aur Master rent/billing lifecycle implement hain. Updated Supabase schema install ho chuka hai; business-module Vercel release ki live verification chal rahi hai.
+Workspace creation, branded sign-in, Team aur permissions ke saath tasks/review, timers, work reports, CRM leads, clients, projects, private files, notifications, finance, invoices aur Master rent/billing lifecycle implement hain. Updated Supabase schema aur Vercel release live hain. Production source/config/branding checks, public pages aur real Master dashboard/finance verified hain. Owner password setup complete hai.
 
 Pehla workspace **Webnoxos** normal internal workspace hai, rent nahi lagta. Master: Haseeb Gul; Admin: Webnox Hub; Manager: Haseeb. Country Pakistan hai. Production mein demo accounts ya dummy business records nahi hain.
 
@@ -57,7 +57,7 @@ Browser mein `http://localhost:3000` kholo. `/api/config` 200 aane par public co
 4. `SITE_URL` = Vercel ka actual app URL. Ismein guessed domain nahi lagana.
 5. Naya Git commit push karne se naya deployment aayega. `/`, `/api/config` aur hidden platform entry verify karo.
 
-Supabase → Authentication → URL Configuration mein live URL Site URL aur `<live URL>/set-password.html` allowed redirect configured hain. Public sign-up disabled hai. Requested email OTP expiry 86400 seconds ka verification pending hai.
+Supabase → Authentication → URL Configuration mein live URL Site URL aur `<live URL>/set-password.html` allowed redirect configured hain. Public sign-up disabled hai. Owner approval ke baad email OTP expiry 86400 seconds save aur fresh page par verify ho chuki hai.
 
 Naye project ke liye Supabase → SQL Editor mein poora `supabase/schema.sql` paste karke Run karo; dobara chalana safe hai. Current project mein schema installed hai. Owner account provision karne ke liye `node --env-file=.env scripts/bootstrap-owner.mjs --create` run karo. Private password link ignored `Files/Owner-Setup.html` mein save hoga; email send nahi hoti. Owner apna password khud set karega.
 

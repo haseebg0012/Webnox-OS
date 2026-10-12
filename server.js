@@ -573,7 +573,15 @@ export function createApp(env = process.env, clientFactory = createClient) {
   });
 
   // Only public/ is served. Source files, docs, attachments and .env stay private.
-  app.use(express.static(publicDirectory, { dotfiles: "deny", etag: false }));
+  app.use(
+    express.static(publicDirectory, {
+      dotfiles: "deny",
+      etag: false,
+      setHeaders(res, file) {
+        if (file.endsWith(".html")) res.setHeader("Cache-Control", "no-store");
+      },
+    }),
+  );
   app.use((_req, res) => res.status(404).type("text").send("Page not found."));
   app.use((error, _req, res, _next) => {
     if (!res.headersSent)
